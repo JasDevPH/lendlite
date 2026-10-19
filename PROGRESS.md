@@ -139,7 +139,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 1 | Stats cards | Done | `StatsOverview`: period filter (`?since=`), 4 stat tiles (awaiting, under review, approved + approval rate, total approved compact), `PipelineBar` stacked bar (2px gaps, hover/focus tooltips, legend = table view). Palette **validated** (fixed red/green CVD clash: rose-700, worst ΔE 8.9). Largest-remainder % (always 100). E2E 11/11. |
 | 2 | Applications table + filters + pagination | Done | `ApplicationsTable`: URL-driven filters (`?status=&min=&max=&page=`, dollars→cents), validation, accessible table with Review links, pagination summary + Prev/Next, keep-previous-while-loading, empty/error states. Fixed sr-only page overflow (`relative` on scroll box; also schedule table). E2E 15/15. |
 | 3 | Detail page | Done | `/admin/applications/[id]`: header (applicant), status-driven `ActionPanel` (Start review; refetch on 409 race), `AffordabilitySnapshot` (income vs expenses vs repayment range, indicative band), documents by type, schedule, Loan/Applicant/Dates cards. API: detail now includes `user {id, fullName, email}` (+ test). Shared `InfoCard`/`DetailRow`. E2E 16/16. |
-| 4 | Approve/reject modals | Todo | |
+| 4 | Approve/reject modals | Done | Native `<dialog>` `Modal` (inert background, Escape, focus return), `ApproveDialog` (rate % → bps, presets, live quote preview, "Approve at X% p.a."), `RejectDialog` (trimmed-length counter, customer-facing reason), fresh mount per open + close on Activity hide, 409 → refetch. **Done-when met** (admin decides in browser). E2E 19/19 incl. race (no schedule created). |
 | 5 | Audit trail view | Todo | |
 
 **Done when:** an admin can review and decide applications in the browser.

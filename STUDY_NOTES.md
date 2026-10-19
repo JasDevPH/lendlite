@@ -2593,4 +2593,47 @@ Real browser, **16/16**:
 
 ---
 
-<!-- Next: 10.4 approve / reject modals -->
+## 10.4 Approve / Decline dialogs
+
+### What it does
+- **`components/ui/Modal`:** a wrapper around the native **`<dialog>` + `showModal()`**, synced to an `open` prop. `onClose` fires on Escape; it has `aria-labelledby`/`aria-describedby`, a blurred `::backdrop`, and content mounted only while open.
+- **`components/ui/TextAreaField`:** labelled textarea with hint/error wiring.
+- **`ApproveDialog`:**
+  - **Rate field (% p.a.)** + preset chips (8.95 / 12.50 / 15.95 / 19.95%). The rate is parsed as a **string → basis points** ("9.95" → 995). Validation: 5–25%; the button is disabled when invalid.
+  - **Live preview** (monthly / total interest / total repayable) from `POST /calculator/quote`: debounced 250 ms, stale requests aborted, `aria-live`.
+  - Confirm button **names the rate** ("Approve at 9.95% p.a.") → `POST /admin/applications/:id/approve`.
+- **`RejectDialog`:**
+  - Reason textarea with a live **"47/1000 characters (minimum 10)"** counter (trimmed length). Error after a submit attempt / blur.
+  - Explains that the **customer will see the reason**. Danger-styled confirm → `POST …/reject` with the trimmed reason.
+- **In `ActionPanel` (UNDER_REVIEW):** "Ready for a decision" with **Decline** / **Approve**.
+  - Each dialog is **mounted only while open** (a fresh form each time).
+  - A `useLayoutEffect` cleanup closes any open dialog when Next hides the page (Activity).
+  - On success → close + refetch. On **409** (someone else decided) → show the message + refetch to the real outcome.
+
+### Why
+- **Native `<dialog>` instead of a hand-rolled modal:** the browser provides the hard parts correctly — inert background, Escape, top layer, focus restoration. Fewer lines, fewer accessibility bugs.
+- **Precise accessibility claim (tested):** the background is **inert** (it can't be focused, even with `.focus()`), and Tab cycles the dialog's controls plus the **browser UI**, never the page behind. A test first asserted a strict "focus trap" and failed; investigating showed this is the specified native behaviour. I corrected both the code comment and the test to state the real guarantee.
+- **Show the consequences before confirming:** the admin sees exactly what the customer will pay at the chosen rate (same quote engine as the real schedule). The button text repeats the rate to prevent mis-clicks on a high-stakes action.
+- **Rate as basis points via string parsing:** the same "no floats" rule as money ("9.95" → 995, not `9.95 * 100`).
+- **The reason is customer-facing:** the copy nudges toward a clear, respectful explanation. The counter shows the *trimmed* length, matching the API's rule.
+- **Fresh dialog each time + close on hide:** avoids a stale reason/rate reappearing, and follows Next's guidance for transient UI under `<Activity>`.
+- **Concurrency:** if another admin decides while this dialog is open, the API's conditional update rejects this one (409). The UI refetches and shows the real outcome, and **no schedule is created** (verified).
+
+### How to test
+Real browser, **19/19**: **Phase 10 done-when** — an admin reviews and decides in the browser:
+- **Dialog behaviour:** Approve → modal with an accessible name; focus starts in the rate field; Tab never reaches the page, which is inert; Escape closes it and focus returns to "Approve".
+- **Validation + preview:** 30% → error + disabled; "abc" → error; preset 15.95% and typed 9.95 → preview **= API quotes**.
+- **Approve:** "Approve at 9.95% p.a." → page shows the approval + **36-row schedule**; DB `APPROVED|995|36` + APPROVED audit.
+- **Decline:** counter counts trimmed characters; a short reason is blocked (still UNDER_REVIEW); a valid reason → Declined, reason trimmed.
+- **Race:** another admin rejects while the Approve dialog is open → page shows the real outcome (Declined), **0 installments**.
+- **Customer side:** dashboard shows Approved + 2 Declined; detail shows 9.95% p.a.
+- **Layout:** the dialog fits a 390 px screen; no overflow; no JS errors.
+
+### Interview points
+- *"How did you build accessible modals?"* — Native `<dialog>` with `showModal()`: inert background, Escape, focus restoration, top layer. I add a labelled title/description and test it with keyboard-only checks.
+- *"How do you prevent mistakes on irreversible actions?"* — Show the consequences (live repayment preview), restate the action in the button ("Approve at 9.95% p.a."), validate inline, and keep a cancel path.
+- *"What happens if two admins decide at once?"* — The DB-level conditional update allows exactly one decision. The loser's UI gets a 409, explains it, and refreshes. Tested end to end.
+
+---
+
+<!-- Next: 10.5 audit trail view -->

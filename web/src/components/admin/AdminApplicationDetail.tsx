@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { RepaymentSchedule } from '@/components/applications/RepaymentSchedule';
 import { StatusBadge } from '@/components/applications/StatusBadge';
 import { DocumentFileItem } from '@/components/documents/DocumentFileItem';
@@ -17,6 +17,8 @@ import type { LoanApplication, LoanApplicationDetail } from '@/lib/types';
 import { useApi } from '@/lib/useApi';
 import { EMPLOYMENT_OPTIONS } from '@/lib/validation/application';
 import { AffordabilitySnapshot } from './AffordabilitySnapshot';
+import { ApproveDialog } from './ApproveDialog';
+import { RejectDialog } from './RejectDialog';
 
 export function AdminApplicationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -138,6 +140,16 @@ export function AdminApplicationDetail() {
 function ActionPanel({ application, onChanged }: { application: LoanApplicationDetail; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null);
+
+  // Decision dialogs are transient: if Next hides this page (Activity), close
+  // them so they're never restored half-open (Next "Preserving UI state" guide)
+  useLayoutEffect(() => () => setDialog(null), []);
+
+  function decided() {
+    setDialog(null);
+    onChanged();
+  }
 
   async function startReview() {
     setBusy(true);
@@ -175,13 +187,21 @@ function ActionPanel({ application, onChanged }: { application: LoanApplicationD
         </div>
       );
     case 'UNDER_REVIEW':
-      // TEMPORARY: the Approve / Reject dialogs are the next component (10.4)
       return (
         <div className={`${panel} border-amber-200 bg-amber-50`}>
           <div>
-            <p className="font-semibold text-amber-900">Under review</p>
-            <p className="text-sm text-amber-900/80">Approve or decline this application. (Decision dialogs are added next.)</p>
+            <p className="font-semibold text-amber-900">Ready for a decision</p>
+            <p className="text-sm text-amber-900/80">Check affordability and documents, then approve with a rate or decline with a reason.</p>
           </div>
+          <div className="flex gap-2">
+            <Button variant="danger" onClick={() => setDialog('reject')}>
+              Decline
+            </Button>
+            <Button onClick={() => setDialog('approve')}>Approve</Button>
+          </div>
+          {/* Mounted only while open → a fresh form every time */}
+          {dialog === 'approve' && <ApproveDialog application={application} open onClose={() => setDialog(null)} onDecided={decided} />}
+          {dialog === 'reject' && <RejectDialog application={application} open onClose={() => setDialog(null)} onDecided={decided} />}
         </div>
       );
     case 'APPROVED':
