@@ -924,4 +924,44 @@ Verified:
 
 ---
 
-<!-- Next: 4.4 applications schema -->
+## 4.4 `modules/applications/applications.schema.ts` (+ shared loan fields)
+
+### What it does
+- **`config/loanRules.ts`** now also exports reusable Zod fields built from `LOAN_LIMITS`: `amountCentsField`, `termMonthsField`, `annualRateBpsField`. The calculator schema was refactored to use them (same behaviour).
+- **`createApplicationSchema`** (`POST /applications` → new DRAFT):
+  - **Required:** `amountCents`, `termMonths`, `purpose` (trimmed, 3–200 chars). That's step 1 of the form.
+  - **Optional:** `employmentType` (Prisma enum), `employerName`, `annualIncomeCents`, `monthlyExpensesCents` (whole cents, 0–$10M). That's step 2.
+- **`updateApplicationSchema`** (`PATCH /applications/:id`): the same fields, **all optional**, plus a `.refine` rejecting an empty update.
+- **`applicationIdParamsSchema`**: `:id` must be a UUID.
+- Inferred types: `CreateApplicationInput`, `UpdateApplicationInput`.
+
+### Why
+- **Shared field validators:** the amount rule is written once and used by the calculator, create, update (and later approval for the rate). It can't drift.
+- **Client can't set protected fields:** `status`, `userId`, `annualRateBps`, `rejectionReason`, `decidedAt` aren't in the schemas, so they're **stripped** (mass-assignment protection). Only the service and admin endpoints change those.
+- **Employment fields optional on a draft:** a multi-step form saves progress as it goes. *Completeness* ("all fields filled") is a **business rule checked at submit** in the service, not a per-request shape rule.
+- **`.refine` for empty PATCH:** `{}` (or a body with only forbidden fields, which become `{}` after stripping) is almost certainly a client bug, so we say so instead of silently doing nothing.
+- **UUID check on `:id`:** a malformed ID like `123` gets a clean 400 instead of hitting the DB. Prisma would throw on an invalid UUID for a uuid column. Here it's a text column, so it would just be a wasted query.
+- **`z.nativeEnum(EmploymentType)`:** uses the Prisma-generated enum, so the API's allowed values always match the database's.
+- **Sanity cap on income ($10M):** catches typos (e.g. dollars sent as cents ×100) and keeps values well within integer limits.
+
+### How to test
+Verified with a throwaway script:
+
+| Input | Result |
+|---|---|
+| create `purpose: "  Car purchase  "` | OK, trimmed |
+| create + `status/userId/annualRateBps` | OK, those fields **stripped** |
+| create missing purpose, amount $60k | 400 Required + Maximum $50,000 |
+| create `employmentType: "ASTRONAUT"`, income −1 | 400 invalid enum + Cannot be negative |
+| update employment fields only | OK |
+| update `{}` / update only `{status}` | 400 Provide at least one field |
+| params `id: "123"` | 400 Invalid application id |
+
+### Interview points
+- *"How do you stop a customer approving their own loan via PATCH?"* — The update schema whitelists editable fields, and `status` isn't one of them. On top of that, the service only allows edits while the status is DRAFT, and status changes go through dedicated, role-guarded endpoints.
+- *"Shape validation vs business rules?"* — Zod checks *shape* (types, ranges, formats) per request. The service enforces *business rules* that need context: ownership, current status, "all fields filled + documents present before submit".
+- *"Why validate route params?"* — Every input is untrusted, URLs included. Early validation gives clear errors and avoids pointless DB work.
+
+---
+
+<!-- Next: 4.5 applications service -->
