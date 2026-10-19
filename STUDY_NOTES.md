@@ -2846,5 +2846,40 @@ docker compose down              # add -v to wipe DB + uploads
 
 ---
 
-<!-- Next: 11.5 GitHub repo + Actions CI -->
+## 11.5 GitHub repo + Actions CI
+
+### What it does
+- **Public repo:** https://github.com/JasDevPH/lendlite. Before publishing, the whole git history was scanned for secrets (Neon URLs, Cloudinary keys, JWT secrets, private keys, `.env` files). Only placeholders were found.
+- **`.github/workflows/ci.yml`** runs on every push to `main` and every pull request. Three jobs:
+  1. **API:**
+     - Starts a throwaway **Postgres 16 service container**, with `TEST_DATABASE_URL` pointing at `lendlite_test`.
+     - Runs `npm ci` → `prisma generate` → typecheck → **89 tests** → build.
+     - Runs `npm audit --omit=dev --audit-level=high`.
+  2. **Web:** `npm ci` → lint → typecheck → `next build` → audit.
+  3. **Compose:** runs only if both pass (`needs`).
+     - `docker compose up --build` from the clean checkout.
+     - Then a curl + jq **smoke test**: the seed job exited 0, the DB is ok, both demo users log in, an upload survives an API restart (same bytes), and the web app renders.
+     - On failure it prints all container logs. It always tears down.
+- **`concurrency`:** a newer push cancels the older run. **`permissions: contents: read`:** least privilege.
+
+### Why
+- **CI is the gate for CD:** Railway's "Wait for CI" deploys `main` only when these checks are green. A broken commit never reaches production.
+- **`npm ci`, not `npm install`:** it installs exactly what the lockfile says and fails if `package.json` and the lockfile disagree. Builds are reproducible.
+- **A real Postgres, not mocks:** the integration tests exercise real SQL, transactions and constraints, the same as locally.
+- **The compose job proves "works from a fresh clone":** a clean machine with no `.env` and no cache. This PC couldn't run it (8 GB RAM), and GitHub's runners can, on every push.
+- **The audit only covers production deps:** dev-tool advisories rarely matter for what ships, and gating on them causes noisy, ignored failures.
+- **Logs on failure:** a red build should explain itself without re-running it locally.
+
+### How to test
+- Push to `main` (or open a PR) → the GitHub **Actions** tab. The first run was **green in about 2.5 minutes**: 89/89 tests, 0 vulnerabilities, "All smoke checks passed".
+- `gh run list` / `gh run view <id> --log` from the terminal.
+
+### Interview points
+- *"What does your CI pipeline do?"* — Typecheck, lint, unit + integration tests against a real Postgres service, production builds, a dependency audit, then a Docker Compose smoke test of the full stack. CD waits for all of it.
+- *"CI vs CD?"* — CI verifies every change automatically. CD ships the verified change automatically: here, Railway deploys `main` only after CI passes.
+- *"What would you add next?"* — ESLint for the API, browser E2E tests (Playwright) in CI, and preview environments per pull request.
+
+---
+
+<!-- Next: 11.6 Railway deploy -->
 
