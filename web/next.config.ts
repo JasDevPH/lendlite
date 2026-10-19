@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
   partialPrefetching: true,
   // Don't advertise the framework in response headers (same idea as helmet on the API)
   poweredByHeader: false,
+  // Docker: emit .next/standalone — a minimal server.js plus only the
+  // node_modules files it actually uses (no `npm install` in the image)
+  output: 'standalone',
   turbopack: {
     rules: {
       '*.css': {

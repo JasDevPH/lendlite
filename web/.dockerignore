@@ -1,0 +1,9 @@
+# Keep the build context small and secret-free
+node_modules
+.next
+coverage
+.env*
+*.log
+tsconfig.tsbuildinfo
+Dockerfile
+.dockerignore

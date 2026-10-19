@@ -2774,5 +2774,43 @@ Verified: the container becomes `healthy`, login returns a token, it runs as use
 
 ---
 
-<!-- Next: 11.3 web Dockerfile -->
+## 11.3 Web Dockerfile
+
+### What it does
+- **`next.config.ts`:** `output: 'standalone'`. `next build` writes `.next/standalone/`: a tiny `server.js` plus **only the `node_modules` files the app actually uses** (found by tracing imports).
+- **`web/Dockerfile`, multi-stage:**
+  - `deps`: `npm ci`, cached until `package*.json` changes.
+  - `build`: copies the source and runs `next build` with `NEXT_PUBLIC_API_URL` from a **build argument**.
+  - `runtime`: copies `.next/standalone`, `.next/static` and `public/` only. It runs as the `node` user with `HOSTNAME=0.0.0.0`, has a healthcheck, and starts with `node server.js`.
+- **`.dockerignore`:** excludes `node_modules`, `.next` and `.env*`.
+
+### Why
+- **Standalone output:** the runtime image needs no `npm install` and no dev tools, so it's smaller and faster to start, with fewer packages to patch.
+- **The API URL is a *build* arg, not a runtime env var:** anything prefixed `NEXT_PUBLIC_` is **copied into the browser JavaScript during `next build`**. Setting it when the container starts would be too late, because the browser bundle is already built. Consequence: build one web image per environment. On Railway this is automatic: a service variable with the same name is passed to the `ARG`.
+- **`HOSTNAME=0.0.0.0`:** inside a container, a server listening only on `localhost` can't be reached through the published port.
+- **Static files must be copied next to `server.js`:** standalone mode leaves `public/` and `.next/static/` out on purpose (they're often served by a CDN). Without them the page loads with no JS or CSS.
+- **`mkdir -p public`:** our `public/` is empty, and git doesn't store empty folders, so a clean clone (CI, Railway) wouldn't have it and the `COPY` would fail.
+- **`node server.js`, not `npm start`:** node receives `SIGTERM` directly. Verified: the container stops in about 1 s instead of being force-killed after the timeout.
+
+### How to test
+```bash
+cd web
+docker build -t lendlite-web --build-arg NEXT_PUBLIC_API_URL=http://localhost:4011/api/v1 .
+docker run --rm -p 3011:3000 lendlite-web     # with the API container on 4011, WEB_ORIGIN=http://localhost:3011
+```
+Browser test, **5/5**:
+- `/` returns 200 with no `X-Powered-By`, and static JS is served.
+- The calculator calls `http://localhost:4011/api/v1/calculator/quote`, the URL baked in at build.
+- Login → "Welcome back, Casey" on the dashboard (CORS between the two containers works).
+- No JS errors.
+
+**Lesson learned:** with 8 GB RAM, Docker builds alongside other running stacks exhausted memory and froze the Docker engine. The fix was to stop unused stacks. You can also cap WSL memory in `.wslconfig`.
+
+### Interview points
+- *"How do environment variables work in Next.js?"* — `NEXT_PUBLIC_*` values are inlined at build time and are public (visible in the browser). Everything else is server-only and read at runtime. So the API URL is a Docker build arg, and secrets never use the `NEXT_PUBLIC_` prefix.
+- *"How did you keep the frontend image small?"* — `output: 'standalone'` traces the files that are actually needed. The runtime stage copies only those plus the static assets: no `npm install`, no dev dependencies.
+
+---
+
+<!-- Next: 11.4 full docker-compose -->
 
