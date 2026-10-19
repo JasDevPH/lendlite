@@ -3,6 +3,7 @@ import { recordAudit } from '../../lib/audit';
 import { prisma } from '../../lib/prisma';
 import type { AuthUser } from '../../types/auth';
 import { AppError } from '../../utils/AppError';
+import { generateSchedule } from '../../utils/amortization';
 import { assertTransition } from '../applications/applications.status';
 import type { ListApplicationsQuery } from './admin.schema';
 
@@ -50,6 +51,62 @@ export async function startReview(id: string, admin: AuthUser) {
     });
   } catch (err) {
     return rethrowIfConcurrentChange(err, id, ApplicationStatus.UNDER_REVIEW);
+  }
+}
+
+// UNDER_REVIEW → APPROVED, and generate the repayment schedule.
+// Spec: ONE transaction for (1) the status update, (2) all installment rows,
+// (3) the audit row. Either the loan is fully approved with its schedule, or
+// nothing changed at all — never "APPROVED with no schedule".
+export async function approve(id: string, admin: AuthUser, annualRateBps: number) {
+  const application = await loadForTransition(id, ApplicationStatus.APPROVED);
+
+  // One timestamp for everything: decidedAt and the schedule's start date match
+  const decidedAt = new Date();
+  // Pure calculation, done BEFORE opening the transaction (keeps it short)
+  const schedule = generateSchedule({
+    principalCents: application.amountCents,
+    annualRateBps,
+    termMonths: application.termMonths,
+    startDate: decidedAt,
+  });
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Status + decision details (conditional: still UNDER_REVIEW?)
+      await tx.loanApplication.update({
+        where: { id, status: application.status },
+        data: { status: ApplicationStatus.APPROVED, annualRateBps, decidedAt, decidedById: admin.id },
+      });
+
+      // 2. All installments in a single INSERT
+      await tx.repaymentInstallment.createMany({
+        data: schedule.installments.map((installment) => ({ applicationId: id, ...installment })),
+      });
+
+      // 3. Audit, with the key numbers of the decision
+      await recordAudit(tx, {
+        applicationId: id,
+        actorId: admin.id,
+        action: 'APPROVED',
+        fromStatus: application.status,
+        toStatus: ApplicationStatus.APPROVED,
+        metadata: {
+          annualRateBps,
+          monthlyPaymentCents: schedule.monthlyPaymentCents,
+          totalInterestCents: schedule.totalInterestCents,
+          installments: schedule.installments.length,
+        },
+      });
+
+      // Return the approved application with its new schedule
+      return tx.loanApplication.findUniqueOrThrow({
+        where: { id },
+        include: { schedule: { orderBy: { installmentNo: 'asc' } } },
+      });
+    });
+  } catch (err) {
+    return rethrowIfConcurrentChange(err, id, ApplicationStatus.APPROVED);
   }
 }
 

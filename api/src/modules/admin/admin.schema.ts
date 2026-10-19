@@ -1,5 +1,6 @@
 import { ApplicationStatus } from '@prisma/client';
 import { z } from 'zod';
+import { annualRateBpsField } from '../../config/loanRules';
 
 // Query strings are always strings ("?page=2"), so numbers use z.coerce here —
 // unlike JSON bodies, where we insist on real numbers.
@@ -20,3 +21,10 @@ export const listApplicationsQuerySchema = z
   });
 
 export type ListApplicationsQuery = z.infer<typeof listApplicationsQuerySchema>;
+
+// Spec: APPROVED requires annualRateBps in 500–2500 (5%–25%)
+export const approveBodySchema = z.object({
+  annualRateBps: annualRateBpsField,
+});
+
+export type ApproveInput = z.infer<typeof approveBodySchema>;

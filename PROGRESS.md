@@ -85,7 +85,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 |---|---|---|---|
 | 1 | Admin list with filters + pagination | Done | `GET /admin/applications` — router-wide `requireAuth + requireRole(ADMIN)`. Query (coerced): `status`, `minAmount`/`maxAmount` (cents, min ≤ max), `page`, `pageSize` (≤100). DRAFTs hidden unless requested. Count + page in one tx, stable sort (createdAt desc, id). Includes applicant + document count. |
 | 2 | start-review | Done | `POST /admin/applications/:id/start-review`: SUBMITTED → UNDER_REVIEW via `assertTransition`; tx update + `REVIEW_STARTED` audit. Shared helpers `loadForTransition` / `rethrowIfConcurrentChange` (P2025 → 409). Race of 2 admins → 200 + 409, 1 audit row. |
-| 3 | approve (transaction + schedule) | Todo | |
+| 3 | approve (transaction + schedule) | Done | `POST /admin/applications/:id/approve` `{ annualRateBps }` (500–2500). UNDER_REVIEW only. Schedule computed before tx; one `$transaction`: conditional status update + `createMany` installments + APPROVED audit (with metadata). **Atomicity proven** (forced step-2 failure → nothing saved). Race → 200 + 409, no duplicate schedule. Full DRAFT → APPROVED flow verified; final balance 0. |
 | 4 | reject | Todo | |
 | 5 | Audit trail endpoint | Todo | |
 | 6 | Stats endpoint (raw SQL) | Todo | |

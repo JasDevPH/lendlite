@@ -1424,4 +1424,59 @@ Verified:
 
 ---
 
-<!-- Next: 6.3 approve (transaction + schedule) -->
+## 6.3 Approve — `POST /admin/applications/:id/approve` (transaction + schedule)
+
+### What it does
+- **Body:** `approveBodySchema` → `{ annualRateBps }` using the shared `annualRateBpsField` (integer, 500–2500).
+- **`approve(id, admin, annualRateBps)`**:
+  1. `loadForTransition(id, APPROVED)`: only UNDER_REVIEW may be approved (SUBMITTED → 409; review can't be skipped).
+  2. `decidedAt = new Date()`, then **`generateSchedule(...)` before the transaction** (pure calculation).
+  3. **`prisma.$transaction`**:
+     1. Conditional update `WHERE status = UNDER_REVIEW` → APPROVED + `annualRateBps`, `decidedAt`, `decidedById`.
+     2. `createMany` all installment rows in **one INSERT**.
+     3. `APPROVED` audit row with metadata `{ annualRateBps, monthlyPaymentCents, totalInterestCents, installments }`.
+     4. Return the application **with its schedule** (ordered).
+  4. P2025 → 409 (concurrent change).
+- The customer's `GET /applications/:id` now shows the schedule too.
+
+### Why
+- **Atomicity is the whole point:** "APPROVED with no schedule", "schedule with no approval", or "approved with no audit record" would all be corrupt states in a lending system. A transaction makes the three writes **all-or-nothing**.
+- **Proved, not assumed:** I planted a conflicting installment #1 so step 2 failed *after* step 1 had already run inside the transaction. Result: status still `UNDER_REVIEW`, `annualRateBps`/`decidedAt` still null, no APPROVED audit. The DB rolled back step 1.
+- **Calculate before the transaction:** transactions hold locks. Keep them short by doing pure CPU work (the schedule) outside, and only DB writes inside.
+- **One `decidedAt` value:** the decision timestamp and the schedule's start date are guaranteed to match.
+- **`createMany` (one INSERT) instead of 12–60 separate inserts:** far fewer round-trips to Neon, so the transaction stays short.
+- **Race between two approvals:** the second admin's conditional update waits for the first's row lock, then finds status APPROVED → P2025 → rollback → 409. Verified: 24 installments (not 48) and the first admin's rate wins.
+- **The rate is validated by the same rule as the calculator,** so quotes and approvals can't disagree about allowed rates.
+- **Audit metadata stores the key numbers:** months later you can see exactly what was approved, even without recomputing.
+- **The forced failure returned a generic 500** (details only in the server log), as designed in 1.4.
+
+### How to test
+```powershell
+# body.json: {"annualRateBps":1200}
+curl.exe -X POST -H "Authorization: Bearer $adminToken" -H "Content-Type: application/json" `
+  --data-binary "@body.json" http://localhost:4001/api/v1/admin/applications/<id>/approve
+```
+Verified over HTTP:
+```
+201 create $10k/12m → 200 submit (ID + PAYSLIP uploaded)
+409 approve while SUBMITTED              (can't skip review)
+200 start review
+400 rate 400 / 3000 / "1200" / missing
+200 approve at 12%  → 12 installments, #1 due +1 month, $888.49 … last $888.47, final balance 0, Σprincipal = 1,000,000
+409 approve again
+     customer detail shows the schedule
+     audit: CREATED → DOCUMENT_UPLOADED ×2 → SUBMITTED → REVIEW_STARTED → APPROVED
+ATOMICITY: forced failure in step 2 → 500, status still UNDER_REVIEW, nothing from step 1 saved
+RACE: 2 approvals at once → 200 + 409, 24 rows (not 48)
+```
+
+### Interview points
+- *"Why does approval use a DB transaction?"* — Three writes must succeed or fail together: status, schedule, audit. Without a transaction, a crash between them leaves an approved loan with no repayment schedule. I proved the rollback by forcing step 2 to fail.
+- *"What does a transaction guarantee?"* — ACID: **A**tomic (all or nothing), **C**onsistent (constraints hold), **I**solated (others don't see half-done work), **D**urable (committed = saved).
+- *"How do you keep transactions fast?"* — Compute before opening it, batch inserts (`createMany`), no external calls (emails, HTTP) inside. Those go after commit.
+- *"What if two admins approve with different rates?"* — Row-level locking + the conditional `WHERE status = 'UNDER_REVIEW'`: the first commits, the second finds the status changed and gets 409, so its rate is never applied.
+- *"Where would you send the 'approved' email?"* — After the transaction commits (or via an outbox table written *inside* the transaction), never inside it. An email can't be rolled back.
+
+---
+
+<!-- Next: 6.4 reject -->

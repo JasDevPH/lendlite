@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../utils/asyncHandler';
-import type { ListApplicationsQuery } from './admin.schema';
+import type { ApproveInput, ListApplicationsQuery } from './admin.schema';
 import * as adminService from './admin.service';
 
 // GET /admin/applications?status=&minAmount=&maxAmount=&page=&pageSize=
@@ -13,5 +13,13 @@ export const listApplications = asyncHandler(async (req, res) => {
 export const startReview = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const application = await adminService.startReview(id, req.user!);
+  res.json({ data: application });
+});
+
+// POST /admin/applications/:id/approve   body: { annualRateBps }
+export const approve = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { annualRateBps } = req.body as ApproveInput;
+  const application = await adminService.approve(id, req.user!, annualRateBps);
   res.json({ data: application });
 });
