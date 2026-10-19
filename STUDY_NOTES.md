@@ -1634,4 +1634,53 @@ Admin review API: paginated, filterable review queue; start-review / approve / r
 
 ---
 
-<!-- Next: Phase 7.1 Jest config + test DB setup -->
+# Phase 7 — Backend tests
+
+## 7.1 Jest config + test DB setup
+
+### What it does
+- **Packages (dev only):** Jest 30, ts-jest, Supertest, `@types/*`, ts-node (lets Jest read `jest.config.ts`).
+- **`jest.config.ts`:** Node environment, tests in `tests/**/*.test.ts`, compiled by ts-jest, `maxWorkers: 1`, 30 s timeout. It wires up three setup hooks:
+
+| Hook | File | Runs | Does |
+|---|---|---|---|
+| `globalSetup` | `tests/setup/globalSetup.ts` | once, before everything | safety check + `prisma migrate deploy` on the **test DB** (creates it if missing) |
+| `setupFiles` | `tests/setup/env.ts` | before each test file loads app code | sets `NODE_ENV=test`, `DATABASE_URL`, `JWT_SECRET`, `UPLOAD_DIR` (temp folder) |
+| `setupFilesAfterEnv` | `tests/setup/afterEnv.ts` | inside each test file | `afterAll(() => prisma.$disconnect())` |
+
+- **`tests/setup/testEnv.ts`:**
+  - `TEST_DATABASE_URL` defaults to `postgresql://…@localhost:5433/lendlite_test` (Docker); CI overrides it.
+  - `assertIsTestDatabase()` **refuses any DB whose name doesn't end in `_test`**.
+- **`tests/helpers/db.ts`:** `resetDb()` = `TRUNCATE` all 5 tables `CASCADE`, so each test starts clean.
+- **`tests/tsconfig.json`:** extends the main config, adds Jest types and `isolatedModules: true`.
+- **`tests/health.test.ts`:** the smoke test, `GET /health` → 200 `database: ok`; unknown route → 404 JSON.
+- **Scripts:** `npm test`, `npm run test:watch`; `npm run typecheck` now also checks `tests/`.
+
+### Why
+- **Separate test database:** tests wipe tables. Running them against Neon dev data would destroy it. The `_test` name guard makes that mistake impossible (verified: pointing at `lendlite` → Jest refuses to start).
+- **Real Postgres, not mocks or SQLite:** our features rely on Postgres behaviour (transactions, unique constraints, conditional updates, raw SQL, enums). Testing against the real engine catches real bugs.
+- **Same migrations as production (`migrate deploy`):** the test schema is guaranteed identical, with no separate "test schema" to drift.
+- **Env vars set *before* app code loads:** `config/env.ts` validates on import, and dotenv never overrides existing variables, so the test values win over `api/.env`.
+- **`maxWorkers: 1`:** all files share one database. Parallel files would truncate each other's data mid-test.
+- **`app.ts` separate from `server.ts` pays off here:** Supertest calls `request(app)` in-memory, with no port and no running server.
+- **`isolatedModules` + separate typecheck:** ts-jest transpiles each file quickly without type-checking (4.6 s vs 18.5 s). Type safety is still enforced by `npm run typecheck`.
+- **Disconnect after each file:** otherwise open DB connections keep Jest from exiting ("open handles").
+- **Dev-only audit findings:** Jest's coverage tooling depends on `sprintf-js`, which has an advisory with **no patched version**. Upgrading Jest 29 → 30 cut findings from 34 (29 high) to 20 moderate; the rest are dev-only and never process user input. `npm audit --omit=dev` = **0**. CI will audit production deps.
+
+### How to test
+```powershell
+docker compose up -d db        # test DB lives in the local Docker Postgres
+cd api
+npm test                       # → Tests: 2 passed
+npm run typecheck              # src + prisma + tests
+```
+
+### Interview points
+- *"How do you test code that uses a database?"* — Integration tests against a real, disposable Postgres (Docker locally, a service container in CI), migrated with the same migrations as production, reset between tests, with a guard so they can never touch a real database.
+- *"Unit vs integration tests?"* — Unit tests check pure logic in isolation (amortization, fast). Integration tests run real HTTP → service → DB (auth, application flow). Both are needed.
+- *"Why is `app.ts` separate from `server.ts`?"* — So tests import the configured app and call it in-memory with Supertest, without opening a port.
+- *"Why run test files serially?"* — They share one database; parallel runs would interfere. (Scaling option: one database or schema per worker.)
+
+---
+
+<!-- Next: 7.2 amortization unit tests -->

@@ -1,0 +1,13 @@
+{
+  // Type-checks the tests (ts-jest uses this too). Adds Jest's global types.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "types": ["node", "jest"],
+    // ts-jest compiles each file on its own (faster, required with node16 modules).
+    // Type errors are caught by `npm run typecheck`, which includes this project.
+    "isolatedModules": true
+  },
+  "include": ["./**/*.ts", "../src/types/**/*.d.ts"]
+}

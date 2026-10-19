@@ -25,6 +25,8 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **Express 4** (not 5) — the spec uses an async wrapper for error handling, which is the Express 4 pattern.
 - **CommonJS output** — simplest setup for Jest/ts-jest in Phase 7.
 - **`module`/`moduleResolution: node16` + `types: ["node"]`** — fixes editor errors under VS Code's bundled TS 6 (node10 resolution deprecated, `@types/node` no longer auto-included). Verified clean on TS 5 and TS 6.
+- **Tests use a separate `lendlite_test` DB** on local Docker Postgres, never Neon.
+- **Dev-only audit findings accepted:** 20 moderate in Jest's coverage tooling (`sprintf-js`, no patched version exists). Production deps: 0. CI should run `npm audit --omit=dev`.
 - **`CLAUDE.md` is gitignored and untracked** (kept locally only, at user request).
 - **Neon (serverless Postgres, Sydney) for the dev database** — added at user request. Docker Compose Postgres remains for the Phase 11 "fresh clone" setup.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
@@ -91,6 +93,17 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 6 | Stats endpoint (raw SQL) | Done | `GET /admin/stats?since=`: one `$queryRaw` tagged-template `GROUP BY` (counts + sums, `::int`/`::bigint`, `COALESCE`), optional `Prisma.sql` WHERE fragment. Zero-filled statuses, BigInt → Number. Cross-checked against Prisma `groupBy`/`aggregate`; injection demo passed. |
 
 **Done when:** full flow DRAFT → APPROVED works, schedule rows exist and final balance = 0, audit trail shows every step.
+
+## Phase 7 — Backend tests (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Jest config + test DB setup | Done | Jest 30 + ts-jest + Supertest. Test DB `lendlite_test` on local Docker (override `TEST_DATABASE_URL`), `_test` name guard, `migrate deploy` in globalSetup, env set before app load, `resetDb()` TRUNCATE helper, serial run. Smoke test (health) passes. |
+| 2 | Amortization unit tests | Todo | |
+| 3 | Auth integration tests | Todo | |
+| 4 | Application flow integration tests | Todo | |
+
+**Done when:** `npm test` passes with all of the above.
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation
