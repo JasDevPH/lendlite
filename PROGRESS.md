@@ -74,7 +74,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 |---|---|---|---|
 | 1 | Multer config (type/size limits) | Done | `middleware/upload.ts`: multer 2.4, PDF/JPG/PNG allow-list (MIME **and** extension must match), 5 MB limit, 1 file, random UUID filenames, absolute `UPLOAD_ROOT`. errorHandler: `LIMIT_FILE_SIZE` → 413 `FILE_TOO_LARGE`, other multer errors → 400. |
 | 2 | Documents service | Done | `uploadDocument` (owner, DRAFT only → 409, **magic-byte check** → 400, tx + `DOCUMENT_UPLOADED` audit, relative `storagePath`), `discardUpload`, `getDocumentForDownload` (owner/admin, path-containment guard). Schema: `type` enum + doc id UUID. |
-| 3 | Upload + download routes | Todo | |
+| 3 | Upload + download routes | Done | `POST /applications/:id/documents` (multipart `file` + `type`; auth/role/id checks before multer; any failure → file deleted) and `GET /documents/:id/download` (owner/admin, `attachment`, `private, no-store`, missing file → 404). Verified 16 HTTP cases; 0 orphan files. |
 | 4 | Submit rule requiring ID + PAYSLIP | Todo | |
 
 **Done when:** uploads saved with random names, bad type → 400, >5MB → 413, submit without docs → 400.

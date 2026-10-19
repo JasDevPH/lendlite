@@ -9,6 +9,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { applicationsRouter } from './modules/applications/applications.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { calculatorRouter } from './modules/calculator/calculator.routes';
+import { documentsRouter } from './modules/documents/documents.routes';
 import { AppError } from './utils/AppError';
 
 // Builds the Express app WITHOUT calling listen(), so tests (Supertest)
@@ -66,6 +67,7 @@ api.get('/health', async (_req, res, next) => {
 api.use('/auth', authRouter);
 api.use('/calculator', calculatorRouter);
 api.use('/applications', applicationsRouter);
+api.use('/documents', documentsRouter);
 
 app.use('/api/v1', api);
 

@@ -1225,4 +1225,61 @@ Verified directly against the service with real file headers (temp folder):
 
 ---
 
-<!-- Next: 5.3 upload + download routes -->
+## 5.3 Upload + download routes (`documents.controller.ts`, `documents.routes.ts`)
+
+### What it does
+| Method | Path | Roles | Chain |
+|---|---|---|---|
+| POST | `/api/v1/applications/:id/documents` | CUSTOMER | requireAuth → role → validate `:id` → **multer** → `upload` |
+| GET | `/api/v1/documents/:id/download` | CUSTOMER, ADMIN | requireAuth → role → validate `:id` → `download` |
+
+- **`upload` controller:**
+  - No file → 400 `FILE_REQUIRED`.
+  - Then, inside `try`: parse `type` with Zod → `uploadDocument` → **201**.
+  - **Any error → `discardUpload(file)`, then rethrow** to the error handler.
+- **`download` controller:**
+  - Ownership lookup.
+  - `Cache-Control: private, no-store`.
+  - `res.download(path, originalName)` streams the file with `Content-Disposition: attachment; filename="March Payslip.pdf"`.
+  - A missing file on disk → 404 instead of a crash.
+- The upload route lives in `applications.routes.ts` (URL is under `/applications`); the download route is in its own `/documents` router.
+
+### Why
+- **Cheap checks before multer:** auth, role and the UUID check run *before* the file is streamed to disk, so unauthenticated or malformed requests never write anything.
+- **Why `type` isn't validated by `validate()` middleware:** multipart bodies are only parsed *by multer*, so `req.body.type` doesn't exist before it. A failure there must also delete the saved file. Doing it inside the controller's `try` gives one cleanup path for every failure.
+- **Every failure path cleans up:** bad type, bad `type` field, not owner, not draft, magic bytes, DB error. Verified: 9 rejected uploads, 0 orphan files.
+- **`Content-Disposition: attachment`:** the browser downloads instead of rendering inline, so a malicious file can't execute in our origin (e.g. HTML/SVG XSS). helmet's `nosniff` stops browsers guessing a different type.
+- **`Cache-Control: private, no-store`:** payslips and IDs must not be cached by shared proxies or left in browser cache.
+- **Original filename only in the download header:** on disk it's still the random name.
+- **Streaming (`res.download`):** the file is piped to the response, never loaded fully into memory.
+
+### How to test
+```powershell
+# PowerShell 7+ / curl.exe:
+curl.exe -H "Authorization: Bearer $t" -F "type=PAYSLIP" -F "file=@C:\path\payslip.pdf" `
+  http://localhost:4001/api/v1/applications/<appId>/documents
+curl.exe -H "Authorization: Bearer $t" -OJ http://localhost:4001/api/v1/documents/<docId>/download
+```
+(Thunder Client / Postman: Body → Form, field `file` as File, `type` as Text.)
+
+Verified end-to-end:
+
+| Request | Result |
+|---|---|
+| valid PDF (PAYSLIP / ID) | **201**, random `storagePath` |
+| `.txt` / exe-as-PDF / bad or missing `type` / no file | **400** |
+| 6 MB | **413** |
+| admin upload / unknown app | **403** / **404** |
+| upload after SUBMITTED | **409** |
+| owner & admin download | **200**, exact bytes, `attachment; filename="March Payslip.pdf"`, `private, no-store` |
+| other customer / no token download | **404** / **401** |
+| files left on disk | **2** (only the accepted ones) |
+
+### Interview points
+- *"What happens to the file if validation fails after upload?"* — Multer has already written it, so the controller wraps processing in try/catch and deletes the file on any error. Verified: no orphans.
+- *"How do you serve user-uploaded files safely?"* — Check ownership; stream from a fixed root; `Content-Disposition: attachment`; `nosniff`; no caching for sensitive data; never serve the upload folder as static files.
+- *"Why not `express.static('uploads')`?"* — Anyone with the URL could fetch any file, with no auth, no ownership check and no audit.
+
+---
+
+<!-- Next: 5.4 submit rule requiring ID + PAYSLIP -->

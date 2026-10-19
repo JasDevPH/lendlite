@@ -2,7 +2,9 @@ import { Role } from '@prisma/client';
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import { requireRole } from '../../middleware/requireRole';
+import { uploadSingleFile } from '../../middleware/upload';
 import { validate } from '../../middleware/validate';
+import * as documentsController from '../documents/documents.controller';
 import * as applicationsController from './applications.controller';
 import {
   applicationIdParamsSchema,
@@ -30,3 +32,6 @@ applicationsRouter.patch(
 );
 // Header: Idempotency-Key (optional)
 applicationsRouter.post('/:id/submit', customerOnly, idParams, applicationsController.submit);
+// Multipart upload. Auth, role and id checks run BEFORE multer, so bad
+// requests are rejected without anything being written to disk.
+applicationsRouter.post('/:id/documents', customerOnly, idParams, uploadSingleFile, documentsController.upload);
