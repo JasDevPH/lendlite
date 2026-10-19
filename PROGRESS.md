@@ -44,7 +44,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | `auth.schema.ts` | Done | Zod `registerSchema` (email trimmed+lowercased; password 8–72, letter+number; fullName 2–100) and `loginSchema`. Unknown keys (e.g. `role`) stripped. Inferred types exported. |
-| 2 | `auth.service.ts` (register/login/hash/sign) | Todo | |
+| 2 | `auth.service.ts` (register/login/hash/sign) | Done | bcrypt cost 12; JWT HS256 `{sub, role}` 1h, algorithm pinned, payload Zod-validated. Register → CUSTOMER only, 409 `EMAIL_TAKEN` (incl. P2002 race). Login → 401 `INVALID_CREDENTIALS` (same msg + dummy-hash timing defence). `getCurrentUser`. `passwordHash` never returned. |
 | 3 | `auth.controller.ts` + routes | Todo | |
 | 4 | `middleware/auth.ts` | Todo | |
 | 5 | `middleware/requireRole.ts` | Todo | |

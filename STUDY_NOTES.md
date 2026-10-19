@@ -537,4 +537,56 @@ login with weak password    → accepted (strength rules don't apply to login)
 
 ---
 
-<!-- Next: 3.2 auth.service.ts -->
+## 3.2 `modules/auth/auth.service.ts`
+
+### What it does
+All authentication business logic. No HTTP here: it takes plain inputs and returns data or throws `AppError`.
+
+| Function | Does | Errors |
+|---|---|---|
+| `hashPassword` / `verifyPassword` | bcrypt hash (cost 12) / compare | — |
+| `signToken(user)` | JWT `{ sub: userId, role }`, HS256, expires in `JWT_EXPIRES_IN` (1h) | — |
+| `verifyToken(token)` | Checks signature + expiry, **pins HS256**, validates payload shape with Zod | 401 `UNAUTHORIZED` |
+| `register(input)` | Rejects duplicate email; creates a **CUSTOMER**; returns `{ token, user }` | 409 `EMAIL_TAKEN` |
+| `login(input)` | Finds user, checks password; returns `{ token, user }` | 401 `INVALID_CREDENTIALS` |
+| `getCurrentUser(id)` | Public profile for `/auth/me` | 401 if the user was deleted |
+
+- **`publicUserSelect`** lists the only user fields ever returned (`id, email, fullName, role, createdAt`). `passwordHash` is never sent.
+- **`PublicUser`** is a type generated from that select.
+
+### Why
+- **Service layer has no `req`/`res`:** it's reusable (seed scripts, tests, a future CLI) and easy to unit test. The controller (next) handles HTTP only.
+- **JWT contents:** `sub` (standard claim for "subject" = user id) and `role`, nothing sensitive. A JWT is **signed, not encrypted**: anyone can base64-decode it and read the payload. The signature only proves *we* issued it and it wasn't changed.
+- **Pin `algorithms: ['HS256']`:** a classic JWT attack sets `alg: "none"` (no signature) or switches algorithms. Pinning rejects anything else. Tested: an `alg=none` admin token → 401.
+- **Zod-validate the decoded payload:** a correctly-signed token with an unexpected shape still gets rejected, which is defence in depth.
+- **Short expiry (1h):** JWTs can't easily be revoked, so a stolen token is only useful briefly.
+- **Same error for unknown email and wrong password:** different messages would let attackers discover which emails have accounts (**user enumeration**).
+- **`DUMMY_HASH` (timing attack defence):** without it, unknown emails return instantly (no bcrypt) while real ones take ~200ms, and attackers could enumerate users by timing. Now both paths run bcrypt. Measured: 627ms vs 685ms.
+- **Role forced to `CUSTOMER` on register:** admins can never be self-created through the public API.
+- **Check-then-insert race:** two simultaneous sign-ups with the same email can both pass `findUnique`. The DB's unique index makes one insert fail with Prisma error **P2002**, which we convert to the same 409.
+- **Explicitly picking public fields** (`select` / destructuring) instead of "everything minus passwordHash": a sensitive column added later can't leak by default (allow-list beats deny-list).
+- *Trade-off:* register's 409 `EMAIL_TAKEN` does reveal that an email exists. That's accepted UX practice, mitigated by rate limiting (component 6).
+
+### How to test
+Verified with a throwaway script against Neon (test user deleted afterwards):
+```
+✔ register new user          → role CUSTOMER, no passwordHash, token {sub, role, iat, exp=iat+3600}
+✖ register same email        → 409 EMAIL_TAKEN
+✔ login correct password     → no passwordHash in user
+✖ login wrong password       → 401 INVALID_CREDENTIALS (685ms)
+✖ login unknown email        → 401 INVALID_CREDENTIALS (627ms, similar timing)
+✔ verify token → getCurrentUser
+✖ tampered / other secret / expired / alg=none token → 401 UNAUTHORIZED
+```
+
+### Interview points
+- *"How does JWT auth work?"* — On login the server signs `{ sub, role, exp }` with a secret. The client sends it as `Authorization: Bearer <token>`. The server verifies the signature and expiry on each request, so there's no session lookup (stateless).
+- *"Is data in a JWT secret?"* — No. It's base64-encoded, not encrypted. Never put sensitive data in it.
+- *"Downsides of JWTs?"* — Hard to revoke before expiry (mitigations: short expiry + refresh tokens, or a denylist), and the role in the token can be stale until it expires.
+- *"What's the `alg: none` attack?"* — A forged token claims no signature is needed. You prevent it by pinning the allowed algorithms on verify.
+- *"How do you prevent user enumeration?"* — Identical error messages *and* similar response times for unknown-user vs wrong-password, plus rate limiting.
+- *"How do you handle race conditions on unique fields?"* — Rely on the DB unique constraint as the final authority and translate its error (P2002) into a clean 409.
+
+---
+
+<!-- Next: 3.3 auth.controller.ts + routes -->
