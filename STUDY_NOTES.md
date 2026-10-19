@@ -106,4 +106,49 @@ Remove-Item Env:NODE_ENV     # reset afterwards
 
 ---
 
-<!-- Next: 1.4 utils/AppError.ts + middleware/errorHandler.ts -->
+## 1.4 `utils/AppError.ts` + `middleware/errorHandler.ts`
+
+### What it does
+- **`AppError`** is a custom error class for *expected* failures. It carries `statusCode`, a machine-readable `code`, a `message`, and optional `details`.
+  Usage anywhere in a service: `throw new AppError(409, 'INVALID_STATUS_TRANSITION', 'Cannot submit an APPROVED application')`.
+- **`notFoundHandler`** is registered after all routes. Any request that matched nothing becomes `404 NOT_FOUND`.
+- **`errorHandler`** is registered last. It catches every error and formats it as `{ error: { code, message, details? } }`:
+
+| Error | Status | code |
+|---|---|---|
+| `AppError` | its own `statusCode` | its own `code` |
+| `ZodError` | 400 | `VALIDATION_ERROR` (+ per-field `details`) |
+| Malformed JSON body | 400 | `INVALID_JSON` |
+| Body over the size limit | 413 | `PAYLOAD_TOO_LARGE` |
+| Unknown route | 404 | `NOT_FOUND` |
+| Anything else (a bug) | 500 | `INTERNAL_ERROR`. The full error and stack are **logged server-side only** |
+
+### Why
+- **One place formats every error.** Controllers and services just `throw`; there's no try/catch + `res.status().json()` repeated in every route. The response shape is guaranteed consistent, so the frontend can rely on `error.code`.
+- **`code` and `message` are separate.** The UI switches on a stable `code` (e.g. show a specific message for `INVALID_STATUS_TRANSITION`), while `message` can change freely.
+- **Never leak internals on 500.** Stack traces and error messages can expose DB details, file paths or secrets. Clients get a generic message, and the logger keeps everything for debugging.
+- **4 parameters are required:** Express identifies error middleware by `fn.length === 4`, so the unused `_next` must stay.
+- **Order matters:** routes → `notFoundHandler` → `errorHandler`.
+- **`instanceof AppError` works** because we compile to ES2022 (native classes). When compiling to ES5, subclassing `Error` breaks `instanceof` unless you call `Object.setPrototypeOf`. That's a classic gotcha.
+
+### How to test
+Tested with a throwaway Express app that threw each error type. Expected output:
+```
+AppError       → 409 {"error":{"code":"INVALID_STATUS_TRANSITION","message":"..."}}
+ZodError       → 400 {"error":{"code":"VALIDATION_ERROR","details":[{"path":"amountCents",...}]}}
+Bad JSON       → 400 INVALID_JSON
+Too large      → 413 PAYLOAD_TOO_LARGE
+Unknown route  → 404 NOT_FOUND
+Unexpected bug → 500 INTERNAL_ERROR   (stack appears only in the server log)
+```
+You'll test it for real against `/health` and unknown routes once `app.ts` exists (1.5).
+
+### Interview points
+- *"How do you handle errors in Express?"* — Centralised error middleware. Business code throws typed `AppError`s; one handler maps error types to HTTP responses with a consistent JSON shape.
+- *"What's the difference between operational errors and bugs?"* — Operational errors (not found, invalid input, conflict) are expected and get a 4xx with a clear message. Bugs are unexpected, so they're logged in full and return a generic 500.
+- *"Why not return the error message on a 500?"* — Information disclosure: it could reveal SQL, file paths or secrets to an attacker.
+- *"How do async errors reach the handler?"* — In Express 4, a rejected promise in a route isn't caught automatically. We'll use an async wrapper that calls `next(err)` (built with the controllers in Phase 3).
+
+---
+
+<!-- Next: 1.5 app.ts + server.ts with /health -->
