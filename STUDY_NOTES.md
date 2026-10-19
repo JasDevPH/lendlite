@@ -1175,4 +1175,54 @@ Only the 3 valid files remained on disk.
 
 ---
 
-<!-- Next: 5.2 documents service -->
+## 5.2 `documents.service.ts` + `documents.schema.ts`
+
+### What it does
+- **Schema:**
+  - `uploadDocumentBodySchema`: `type` must be `PAYSLIP | ID | BANK_STATEMENT`.
+  - `documentIdParamsSchema`: UUID.
+- **`uploadDocument(applicationId, user, file, type)`**, called *after* multer saved the file:
+  1. Owner check → 404 (same as applications).
+  2. Application must be **DRAFT** → else 409 `APPLICATION_NOT_EDITABLE`.
+  3. **Magic-byte check:** reads the file's first bytes and compares them to the real signature for the declared type (`%PDF-`, `\x89PNG…`, `FF D8 FF`). Mismatch → 400 `INVALID_FILE_TYPE`.
+  4. **Transaction:** `Document` row (original `fileName` for display, **relative** `storagePath`, mime, size) + `DOCUMENT_UPLOADED` audit row (metadata: documentId, type, fileName).
+- **`discardUpload(file)`** deletes a file we're not keeping. It never throws (a cleanup failure mustn't hide the real error). The controller calls it whenever upload processing fails.
+- **`getDocumentForDownload(id, user)`**:
+  - Owner (via the parent application, inside the query) or admin; others → 404.
+  - Resolves `storagePath` inside `UPLOAD_ROOT` and refuses anything that escapes it.
+
+### Why
+- **Magic bytes > MIME type + extension:** the filename and `Content-Type` are typed by the client. The first bytes *are the file*. Tested: an `.exe` (`MZ` header) named `virus.pdf` with type `application/pdf` passed multer's checks but was **rejected here**.
+- **Documents frozen after submit:** what the reviewer assesses must be exactly what was submitted. Changing documents mid-review would undermine the decision and the audit trail.
+- **Relative `storagePath`:** store `4a6e…pdf`, not `C:\Users\…\uploads\4a6e…pdf`. Moving the upload folder (new server, Docker volume, later S3 key) doesn't break existing rows.
+- **Path containment check (`startsWith(UPLOAD_ROOT + sep)`):** even if a DB row were tampered with (`../../.env`), download can't read files outside the upload folder. Defence in depth. Tested → 404.
+- **Ownership through the relation (`application: { userId }`):** documents don't have their own owner column. Ownership is inherited from the application and checked in the same query.
+- **Audit log for uploads:** "who added which document, when" matters in lending (e.g. a payslip swapped before review).
+- **Cleanup is the caller's job, done in one place:** multer writes the file *before* we know if it's allowed (ownership, status, bytes). Every failure path must delete it, or the disk fills with orphans.
+- *Known gaps (fine for this project, worth mentioning):*
+  - Files are written *before* the ownership check (an attacker could make the server write-then-delete files). A pre-multer ownership middleware would avoid that.
+  - Deleting an application removes document *rows* (cascade) but not *files*. There's no delete endpoint in the API, but a real system would clean up storage too.
+
+### How to test
+Verified directly against the service with real file headers (temp folder):
+```
+✔ real PDF / PNG / JPEG                  → saved; storagePath = "<uuid>.pdf" (relative)
+✖ .exe disguised as PDF                  → 400 INVALID_FILE_TYPE (magic bytes)
+✖ PNG bytes declared as PDF              → 400 INVALID_FILE_TYPE
+✖ other customer uploads                 → 404
+   3 DOCUMENT_UPLOADED audit rows (one per accepted file)
+✔ owner / admin download lookup          → path inside UPLOAD_ROOT
+✖ other customer download lookup         → 404
+✖ tampered storagePath "../../.env"      → 404
+✖ upload after SUBMITTED                 → 409 APPLICATION_NOT_EDITABLE
+```
+
+### Interview points
+- *"What are magic bytes?"* — Fixed signatures at the start of a file format (PDF starts with `%PDF-`, PNG with `89 50 4E 47…`). Checking them verifies the content, not just the label.
+- *"How do you prevent path traversal on download?"* — Never build paths from user input. Store generated names, resolve against a fixed root, and verify the result is still inside that root.
+- *"Why store relative paths?"* — Portability: storage location is config, not data. The same idea as storing an S3 *key* rather than a full URL.
+- *"Why can't documents change after submit?"* — Integrity of the review: the decision and audit trail refer to a fixed set of evidence.
+
+---
+
+<!-- Next: 5.3 upload + download routes -->
