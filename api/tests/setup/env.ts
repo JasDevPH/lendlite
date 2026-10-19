@@ -8,4 +8,6 @@ process.env.NODE_ENV = 'test'; // logger silent
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.JWT_SECRET = 'test-secret-that-is-long-enough-for-validation';
 process.env.UPLOAD_DIR = TEST_UPLOAD_DIR;
+// Always the local folder, even if api/.env says cloudinary: tests must never touch a real account
+process.env.STORAGE_DRIVER = 'local';
 process.env.WEB_ORIGIN = 'http://localhost:3000';

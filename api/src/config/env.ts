@@ -14,9 +14,21 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(5),
+  // Where document files live: local folder (dev/tests) or Cloudinary (production)
+  STORAGE_DRIVER: z.enum(['local', 'cloudinary']).default('local'),
+  // From the Cloudinary dashboard; the SDK reads it straight from process.env
+  CLOUDINARY_URL: z
+    .string()
+    .regex(/^cloudinary:\/\/[^:]+:[^@]+@.+$/, 'must look like cloudinary://<api_key>:<api_secret>@<cloud_name>')
+    .optional(),
+  CLOUDINARY_FOLDER: z.string().default('lendlite/documents'),
   // Number of reverse proxies in front of the API (Railway = 1). 0 locally: trusting
   // X-Forwarded-For without a proxy would let clients fake their IP and dodge the rate limiter.
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+}).refine((e) => e.STORAGE_DRIVER !== 'cloudinary' || e.CLOUDINARY_URL, {
+  // Fail at boot, not on the first upload
+  message: 'CLOUDINARY_URL is required when STORAGE_DRIVER=cloudinary',
+  path: ['CLOUDINARY_URL'],
 });
 
 export type Env = z.infer<typeof envSchema>;

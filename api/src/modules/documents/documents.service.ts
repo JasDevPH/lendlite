@@ -1,10 +1,11 @@
 import { ApplicationStatus, Role } from '@prisma/client';
-import { open, unlink } from 'node:fs/promises';
-import { basename, resolve, sep } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { extname } from 'node:path';
+import type { Readable } from 'node:stream';
 import { recordAudit } from '../../lib/audit';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
-import { UPLOAD_ROOT } from '../../middleware/upload';
+import { storage } from '../../lib/storage';
 import type { AuthUser } from '../../types/auth';
 import { AppError } from '../../utils/AppError';
 import type { DocumentType } from './documents.schema';
@@ -20,44 +21,14 @@ const MAGIC_BYTES: Record<string, number[]> = {
   'image/jpeg': [0xff, 0xd8, 0xff],
 };
 
-async function hasExpectedSignature(filePath: string, mimeType: string): Promise<boolean> {
+function hasExpectedSignature(data: Buffer, mimeType: string): boolean {
   const expected = MAGIC_BYTES[mimeType];
-  if (!expected) return false;
-
-  const handle = await open(filePath, 'r');
-  try {
-    const buffer = Buffer.alloc(expected.length);
-    const { bytesRead } = await handle.read(buffer, 0, expected.length, 0);
-    return bytesRead === expected.length && expected.every((byte, i) => buffer[i] === byte);
-  } finally {
-    await handle.close();
-  }
-}
-
-// Delete an uploaded file we're not keeping (failed validation, not allowed…).
-// Never throws: a cleanup failure shouldn't hide the original error.
-export async function discardUpload(file: Express.Multer.File): Promise<void> {
-  try {
-    await unlink(file.path);
-  } catch (err) {
-    logger.warn({ err, path: file.path }, 'Failed to delete discarded upload');
-  }
-}
-
-// Resolve a stored relative path to an absolute one, refusing anything that
-// would escape the upload folder (defence in depth against a tampered DB row)
-function toAbsoluteUploadPath(storagePath: string): string {
-  const absolute = resolve(UPLOAD_ROOT, storagePath);
-  if (!absolute.startsWith(UPLOAD_ROOT + sep)) {
-    throw new AppError(404, 'NOT_FOUND', 'Document not found');
-  }
-  return absolute;
+  return !!expected && data.length >= expected.length && expected.every((byte, i) => data[i] === byte);
 }
 
 // ---------- Use cases ----------
 
-// Saves metadata for a file multer has already written to disk.
-// The CALLER must discardUpload(file) if this throws.
+// Validates the in-memory upload, stores the bytes, then records the row.
 export async function uploadDocument(
   applicationId: string,
   user: AuthUser,
@@ -80,37 +51,50 @@ export async function uploadDocument(
     );
   }
 
-  if (!(await hasExpectedSignature(file.path, file.mimetype))) {
+  if (!hasExpectedSignature(file.buffer, file.mimetype)) {
     throw new AppError(400, 'INVALID_FILE_TYPE', 'File contents do not match a PDF, JPG or PNG');
   }
 
-  return prisma.$transaction(async (tx) => {
-    const document = await tx.document.create({
-      data: {
+  // Random key: never trust the client's filename in storage (path traversal
+  // like "../../app.ts", overwriting another file). The original name is kept
+  // only in the DB for display. Only the key is stored, so the storage location
+  // can change (new folder, Cloudinary) without breaking rows.
+  const storageKey = `${randomUUID()}${extname(file.originalname).toLowerCase()}`;
+  await storage.save(storageKey, file.buffer, file.mimetype);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const document = await tx.document.create({
+        data: {
+          applicationId,
+          type,
+          fileName: file.originalname, // shown to users only
+          storagePath: storageKey,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+        },
+      });
+      await recordAudit(tx, {
         applicationId,
-        type,
-        fileName: file.originalname, // shown to users only
-        // Store only the generated name, not the absolute path: the upload
-        // folder can move (new server, Docker volume) without breaking rows
-        storagePath: basename(file.path),
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-      },
+        actorId: user.id,
+        action: 'DOCUMENT_UPLOADED',
+        metadata: { documentId: document.id, type, fileName: file.originalname },
+      });
+      return document;
     });
-    await recordAudit(tx, {
-      applicationId,
-      actorId: user.id,
-      action: 'DOCUMENT_UPLOADED',
-      metadata: { documentId: document.id, type, fileName: file.originalname },
-    });
-    return document;
-  });
+  } catch (err) {
+    // Storage and DB can't share a transaction: undo the save by hand so no
+    // orphan file is left behind. A failed cleanup must not hide the real error.
+    await storage.remove(storageKey).catch((cleanupErr) => logger.warn({ err: cleanupErr, storageKey }, 'Failed to remove orphan upload'));
+    throw err;
+  }
 }
 
 export interface DownloadableDocument {
-  absolutePath: string;
+  content: Readable;
   fileName: string;
   mimeType: string;
+  sizeBytes: number;
 }
 
 // Owner of the application, or any admin. Others get 404.
@@ -125,8 +109,10 @@ export async function getDocumentForDownload(documentId: string, user: AuthUser)
   if (!document) throw new AppError(404, 'NOT_FOUND', 'Document not found');
 
   return {
-    absolutePath: toAbsoluteUploadPath(document.storagePath),
+    // Only fetched AFTER the ownership check above
+    content: await storage.read(document.storagePath),
     fileName: document.fileName,
     mimeType: document.mimeType,
+    sizeBytes: document.sizeBytes,
   };
 }

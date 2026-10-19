@@ -2730,5 +2730,49 @@ Verified: the container becomes `healthy`, login returns a token, it runs as use
 
 ---
 
-<!-- Next: 11.2 web Dockerfile -->
+## 11.2 Cloudinary file storage
+
+### What it does
+- **`lib/storage/fileStorage.ts`:** a small interface — `save(key, data, mimeType)`, `read(key)` → stream, `remove(key)`.
+- **Two implementations:**
+  - **`diskStorage`** (dev + tests):
+    - Writes into `UPLOAD_DIR`.
+    - Refuses keys that escape the folder.
+    - Never overwrites (`wx` flag).
+    - A missing file → 404.
+  - **`cloudinaryStorage`** (production):
+    - Uploads as `resource_type: 'raw'`, `type: 'authenticated'`, so unsigned URLs are refused.
+    - Downloads via a **signed link valid for 60 s** that only our server uses. The bytes are **streamed through the API**.
+- **`lib/storage/index.ts`** picks one at startup from `STORAGE_DRIVER=local|cloudinary`.
+- **`env.ts`:** `CLOUDINARY_URL` is format-checked and **required when the driver is cloudinary**, so the app refuses to boot without it.
+- **Upload flow change:** multer now keeps the file **in memory**. The service checks owner → DRAFT → magic bytes, *then* stores the file, *then* writes the DB row + audit. If the DB write fails, the stored file is removed (compensation).
+- **Download:**
+  - The controller sets `Content-Disposition: attachment`, type, length and `no-store`.
+  - It `pipeline`s the stream to the response.
+  - The frontend is unchanged.
+
+### Why
+- **Railway's disk is ephemeral:** every deploy starts a fresh container, so files on local disk would vanish. Object storage (Cloudinary) lives outside the app.
+- **Interface + two drivers (dependency inversion):** the documents module doesn't know or care where bytes go. Tests stay fast and offline (no real account touched; tests force `local`). Swapping to S3 later is one new file.
+- **Private by design:** these are IDs and payslips.
+  - `authenticated` delivery means a guessed or leaked plain URL returns 401.
+  - The browser only ever talks to **our** API, which enforces the owner/admin check, so the 404-not-403 rule still applies.
+- **Validate before storing:** with disk storage, multer wrote first and we cleaned up rejects. With memory storage, nothing invalid is ever written, which matters more when "written" means a network upload to a third party.
+- **Storage + DB can't share a transaction:** so the order is store → DB transaction, and on failure remove the file. The worst case (the cleanup also fails) is an orphan file nobody references, never a DB row pointing at a missing file.
+- **Streaming (`pipeline`):** a 5 MB file isn't buffered per download. `pipeline` handles errors and closes both ends.
+- **`raw` instead of `image`:** we're a document vault, not an image CDN. One code path for PDF/JPG/PNG, and no transformations.
+
+### How to test
+- `npm test` → **89/89**. The upload/download tests run through the new code on disk storage, plus 4 new unit tests: save/read/remove, no overwrite, path traversal refused, removing a missing file is OK.
+- Fail-fast: `STORAGE_DRIVER=cloudinary` without `CLOUDINARY_URL` → the app exits with a clear message.
+- **Live Cloudinary check** (after adding `CLOUDINARY_URL` to `api/.env`): `npx tsx scripts/check-cloudinary.ts`. It uploads a test file, reads it back exactly, checks that a **plain URL is refused**, deletes it, and confirms it's gone.
+
+### Interview points
+- *"How do you store sensitive uploads?"* — Private (authenticated) object storage, random keys, type checked by MIME + extension + magic bytes. Files are only served through an API that checks ownership, with short-lived signed URLs server-side.
+- *"Why an abstraction over storage?"* — Local disk for dev/tests, Cloudinary in prod, chosen by config. It's testable offline and swappable, and the business logic doesn't change.
+- *"What if the upload succeeds but the DB insert fails?"* — There's no distributed transaction, so I compensate: delete the stored file. I order the steps so the failure mode is a harmless orphan, not a broken reference.
+
+---
+
+<!-- Next: 11.3 web Dockerfile -->
 

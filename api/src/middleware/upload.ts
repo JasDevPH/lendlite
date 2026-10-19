@@ -1,13 +1,7 @@
-import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { extname, resolve } from 'node:path';
+import { extname } from 'node:path';
 import multer from 'multer';
 import { env } from '../config/env';
 import { AppError } from '../utils/AppError';
-
-// Absolute path, so it doesn't depend on where the process was started from
-export const UPLOAD_ROOT = resolve(env.UPLOAD_DIR);
-mkdirSync(UPLOAD_ROOT, { recursive: true });
 
 // Allow-list: each accepted MIME type and the extensions that may carry it.
 // Spec: PDF/JPG/PNG only, checked by mimetype AND extension.
@@ -19,15 +13,10 @@ const ALLOWED_TYPES: Record<string, readonly string[]> = {
 
 export const MAX_UPLOAD_BYTES = env.MAX_UPLOAD_MB * 1024 * 1024;
 
-const storage = multer.diskStorage({
-  destination: UPLOAD_ROOT,
-  // Random name: never trust the client's filename on disk (path traversal like
-  // "../../app.ts", overwriting another file, odd characters). The original name
-  // is kept only in the DB for display.
-  filename: (_req, file, cb) => {
-    cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`);
-  },
-});
+// Keep the upload in memory (max 5 MB) until it has passed every check; only
+// then does the documents service store it (disk or Cloudinary). Nothing
+// rejected is ever written anywhere, so there's nothing to clean up.
+const storage = multer.memoryStorage();
 
 function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback): void {
   const allowedExtensions = ALLOWED_TYPES[file.mimetype];

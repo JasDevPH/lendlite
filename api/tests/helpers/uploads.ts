@@ -1,13 +1,13 @@
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { UPLOAD_ROOT } from '../../src/middleware/upload';
+import { TEST_UPLOAD_DIR } from '../setup/testEnv';
 
-// Uploaded files live on disk (a temp folder in tests), not in the DB, so
-// resetDb() doesn't remove them. These keep the folder clean and countable.
+// Tests use the local disk storage (a temp folder), not the DB, so resetDb()
+// doesn't remove the files. These keep the folder clean and countable.
 export function clearUploads(): void {
-  rmSync(UPLOAD_ROOT, { recursive: true, force: true });
-  mkdirSync(UPLOAD_ROOT, { recursive: true });
+  rmSync(TEST_UPLOAD_DIR, { recursive: true, force: true });
+  mkdirSync(TEST_UPLOAD_DIR, { recursive: true });
 }
 
 export function countUploadedFiles(): number {
-  return readdirSync(UPLOAD_ROOT).length;
+  return readdirSync(TEST_UPLOAD_DIR).length;
 }
