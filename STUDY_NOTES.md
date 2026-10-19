@@ -2881,5 +2881,51 @@ docker compose down              # add -v to wipe DB + uploads
 
 ---
 
-<!-- Next: 11.6 Railway deploy -->
+## 11.6 Railway deploy (CI/CD)
+
+### What it does
+- **Live:**
+  - Web: https://web-production-a5b6c.up.railway.app
+  - API: https://api-production-01fb.up.railway.app/api/v1/health
+- **The Railway project `lendlite` has 3 services:**
+  - **Postgres**, Railway's template, reachable **only on the private network**.
+  - **api**, built from `api/Dockerfile` (root directory `/api`). It has a healthcheck on `/api/v1/health` and restarts on failure.
+  - **web**, built from `web/Dockerfile` (root directory `/web`), with a healthcheck on `/`.
+- **Variables use Railway references, not copied values:**
+  - `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+  - `WEB_ORIGIN=https://${{web.RAILWAY_PUBLIC_DOMAIN}}`.
+  - `NEXT_PUBLIC_API_URL=https://${{api.RAILWAY_PUBLIC_DOMAIN}}/api/v1`, passed to the web Docker build arg.
+  - Plus `TRUST_PROXY=1`, `STORAGE_DRIVER=cloudinary`, a fresh `JWT_SECRET` and `CLOUDINARY_URL`. The secrets were piped through stdin and never printed.
+- **CI/CD flow:** `git push` to `main` → GitHub Actions runs CI → Railway sees the green check suite (**Wait for CI**) → builds the changed service → healthcheck passes → traffic switches to the new version. **Watch paths** (`/api/**`, `/web/**`) rebuild only the service whose folder changed.
+- **Migrations** run automatically at container start (`prisma migrate deploy`).
+- **Demo users** were seeded once: a temporary TCP proxy was opened to the private DB, `prisma db seed` was run, and the proxy was deleted.
+
+### Why
+- **Deploy only what passed CI:** "Wait for CI" makes the green check a hard gate, so a broken commit is built and tested but never shipped.
+- **Healthchecks = zero-downtime deploys:** Railway keeps the old container serving until the new one answers its healthcheck. A deploy that can't reach the DB never takes traffic.
+- **Reference variables:** if a domain or DB password changes, every service picks it up. Nothing is copy-pasted, and secrets don't drift.
+- **Private database:** it isn't reachable from the internet at all. The one-off seed used a proxy that existed for about a minute.
+- **Secrets hygiene:** values were piped via stdin, so they never appear on a command line, in shell history or in logs. Lesson: Windows PowerShell appends a newline when piping, which would have broken the `CLOUDINARY_URL` format check, so the lengths were verified afterwards.
+- **Postgres 18 in production vs 16 in dev/CI:** the template had already initialised its volume with 18, and an older Postgres can't open newer data files. The schema is standard SQL, so the difference is harmless. In a real company you'd pin the same major version everywhere from day one.
+
+### How to test
+- Open the web URL and log in as `customer@lendlite.dev / Customer1234` or `admin@lendlite.dev / Admin1234`.
+- **Live smoke test 12/12:**
+  - Health/DB, helmet headers, and CORS (always answers with the single allowed origin).
+  - Both logins.
+  - Documents → Cloudinary, with a download of the exact bytes.
+  - Idempotent submit.
+  - Approval → 24-row schedule ending at $0.00.
+  - Landing calculator, the customer's approved loan page, and the admin audit trail (6 events).
+  - No JS errors.
+- `railway service list` / `railway logs --service api` from the terminal.
+
+### Interview points
+- *"Walk me through your deployment pipeline."* — Push to main → GitHub Actions (typecheck, lint, tests on a real Postgres, builds, audit, compose smoke test) → Railway waits for green → Docker build → migrations on start → healthcheck → traffic switch.
+- *"How do you handle secrets in production?"* — Platform variables, never in git. They're injected at runtime (or build time for the public URL only), set via stdin, and referenced between services instead of copied.
+- *"How did you seed production safely?"* — The DB has no public endpoint. I opened a temporary proxy, ran the idempotent seed, and deleted the proxy immediately.
+
+---
+
+<!-- Next: 11.7 README -->
 
