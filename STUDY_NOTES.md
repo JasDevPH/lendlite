@@ -2283,4 +2283,41 @@ Real browser, **21/21**:
 
 ---
 
-<!-- Next: 9.3b Step 2 employment & income -->
+## 9.3b Step 2 — Employment & income
+
+### What it does
+- **`EmploymentStep`:**
+  - **Fields:** employment status (select), employer name, annual income ($, before tax), monthly expenses ($).
+  - **Adaptive employer field:** hidden until a status is chosen, **"Business name"** for self-employed, **hidden** when "Not currently working".
+  - **Live hint** under income: "About $7,083 per month before tax".
+  - **Save:** `PATCH /applications/:id`, then go to Documents; Back → Loan details. API validation errors are mapped onto fields.
+- **`employmentSchema` (Zod):**
+  - Status enum required; employer name required **unless unemployed** (same rule as the API's submit check).
+  - Dollar fields: required, string → cents, **0 allowed**, ≤ $10M sanity cap.
+  - `employerName` is omitted from the payload when unemployed.
+- **`StepActions`:** shared footer (← Back, note, Save & continue with loading), now used by Steps 1 and 2. `centsToInput()` shows saved cents back as "85000" or "85000.50".
+
+### Why
+- **Ask only what's relevant:** an unemployed applicant shouldn't be asked for an employer. Hiding fields reduces drop-off and avoids nonsense data, and the client and server rules match.
+- **$0 is a valid answer:** no income or no expenses is real information. The schema (and the API, which checks `== null`, not falsiness) treat `0` as answered.
+- **Annual income, monthly expenses:** match how people know these numbers (salary per year, bills per month). The per-month hint makes the yearly figure concrete. Responsible lending is about affordability.
+- **Shared `StepActions`:** consistent buttons, spacing and loading behaviour across steps; one place to change.
+- **Integration check:** after Steps 1–2, the API's submit endpoint reports `missingFields: []` and `missingDocuments: ['ID', 'PAYSLIP']`. The form collects exactly what the business rules require.
+
+### How to test
+Real browser, **17/17** (+ Step 1 regression 21/21 after the `StepActions` refactor):
+- **Display:** stepper shows step 1 done ✓ / step 2 current; employer field hidden until a status is chosen.
+- **Validation:** empty submit → status/income/expenses errors; employer required when employed; `abc` → format error; `$99,999,999` → "too large".
+- **Adaptive field:** self-employed → "Business name"; not working → field hidden.
+- **Save:** unemployed + `0` / `0` saved → DB `UNEMPLOYED|0|0|NULL` → step 3; Back restores the values.
+- **Cents:** `$85,000.50` + `2,400` → DB `FULL_TIME|8500050|240000|Acme Pty Ltd`; still one application (PATCH); per-month hint correct.
+- **API:** after step 2, only documents are missing.
+- **Layout:** no mobile overflow; no JS errors.
+
+### Interview points
+- *"How do conditional fields stay consistent with the backend?"* — The same rule exists on both sides (employer required unless unemployed). The client gives instant feedback; the server's submit check is the authority.
+- *"Why treat 0 differently from empty?"* — Empty = not answered; 0 = answered "none". Checking `value == null` instead of `!value` avoids a classic JavaScript falsy bug.
+
+---
+
+<!-- Next: 9.3c/9.4 documents step -->

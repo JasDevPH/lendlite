@@ -8,6 +8,7 @@ import { Button, buttonClasses } from '@/components/ui/Button';
 import { LOAN_LIMITS as L } from '@/lib/loanRules';
 import type { LoanApplicationDetail } from '@/lib/types';
 import { useApi } from '@/lib/useApi';
+import { EmploymentStep } from './EmploymentStep';
 import { LoanDetailsStep } from './LoanDetailsStep';
 import { Stepper, type StepDefinition } from './Stepper';
 
@@ -103,6 +104,16 @@ export function ApplicationWizard() {
             onSaved={(saved) => {
               if (draftId) reload(); // keep the loaded copy in sync for later steps
               goTo('employment', saved.id);
+            }}
+          />
+        ) : step === 'employment' && application ? (
+          <EmploymentStep
+            key={application.id}
+            application={application}
+            onBack={() => goTo('details')}
+            onSaved={() => {
+              reload();
+              goTo('documents');
             }}
           />
         ) : (

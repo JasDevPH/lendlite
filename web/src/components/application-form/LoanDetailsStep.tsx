@@ -2,19 +2,20 @@
 
 import { useState, type FormEvent } from 'react';
 import { Alert } from '@/components/ui/Alert';
-import { Button } from '@/components/ui/Button';
 import { SelectField } from '@/components/ui/SelectField';
 import { TextField } from '@/components/ui/TextField';
 import { api, ApiError } from '@/lib/api';
 import type { LoanApplication } from '@/lib/types';
 import { toFieldErrors } from '@/lib/validation/auth';
 import {
+  centsToInput,
   LOAN_DETAILS_API_FIELDS,
   loanDetailsSchema,
   PURPOSE_OPTIONS,
   termOptions,
   type LoanDetailsValues,
 } from '@/lib/validation/application';
+import { StepActions } from './StepActions';
 
 interface Props {
   // Existing draft (editing) — or undefined for a brand-new application
@@ -29,8 +30,7 @@ function initialValues(application?: LoanApplication, prefill?: Props['prefill']
   const purpose = application?.purpose ?? '';
   const isPreset = (PURPOSE_OPTIONS as readonly string[]).includes(purpose);
   return {
-    // Show whole dollars without ".00"; keep cents if there are any
-    amount: amountCents === undefined ? '' : amountCents % 100 === 0 ? String(amountCents / 100) : (amountCents / 100).toFixed(2),
+    amount: centsToInput(amountCents),
     termMonths: String(application?.termMonths ?? prefill?.termMonths ?? ''),
     purposeChoice: purpose ? (isPreset ? purpose : 'Other') : '',
     purposeOther: purpose && !isPreset ? purpose : '',
@@ -131,12 +131,7 @@ export function LoanDetailsStep({ application, prefill, onSaved }: Props) {
         />
       )}
 
-      <div className="flex flex-col-reverse items-stretch gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-subtle">{application ? 'Changes are saved to your draft.' : "We'll save this as a draft you can come back to."}</p>
-        <Button type="submit" size="lg" loading={saving}>
-          {saving ? 'Saving…' : 'Save & continue'}
-        </Button>
-      </div>
+      <StepActions saving={saving} note={application ? 'Changes are saved to your draft.' : "We'll save this as a draft you can come back to."} />
     </form>
   );
 }
