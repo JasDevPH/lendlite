@@ -7,4 +7,6 @@ export type { FileStorage } from './fileStorage';
 
 // One storage for the whole app, chosen once at startup from STORAGE_DRIVER
 export const storage: FileStorage =
-  env.STORAGE_DRIVER === 'cloudinary' ? createCloudinaryStorage(env.CLOUDINARY_FOLDER) : createDiskStorage(env.UPLOAD_DIR);
+  env.STORAGE_DRIVER === 'cloudinary'
+    ? createCloudinaryStorage(env.CLOUDINARY_URL!, env.CLOUDINARY_FOLDER) // presence guaranteed by env.ts refine
+    : createDiskStorage(env.UPLOAD_DIR);

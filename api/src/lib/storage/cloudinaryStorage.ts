@@ -13,9 +13,17 @@ const DELIVERY = { resource_type: 'raw', type: 'authenticated' } as const;
 const LINK_TTL_SECONDS = 60;
 
 // Production storage (Railway's disk is wiped on every deploy).
-// Credentials come from CLOUDINARY_URL, which the SDK reads from the environment.
-export function createCloudinaryStorage(folder: string): FileStorage {
-  cloudinary.config({ secure: true });
+// cloudinaryUrl = cloudinary://<api_key>:<api_secret>@<cloud_name>
+export function createCloudinaryStorage(cloudinaryUrl: string, folder: string): FileStorage {
+  // Configure explicitly from our validated env, rather than relying on the SDK
+  // auto-reading process.env at import time (which can run before dotenv loads)
+  const { hostname, username, password } = new URL(cloudinaryUrl);
+  cloudinary.config({
+    cloud_name: hostname,
+    api_key: decodeURIComponent(username),
+    api_secret: decodeURIComponent(password),
+    secure: true,
+  });
   const publicId = (key: string) => `${folder}/${key}`;
 
   return {
