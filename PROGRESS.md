@@ -120,7 +120,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** can register/login from the UI and see an empty dashboard.
 
-## Phase 9 — Customer UI (in progress)
+## Phase 9 — Customer UI ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -128,7 +128,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 2 | Dashboard list | Done | `STATUS_META` + `StatusBadge` (text + colour), reusable `useApi` hook (loading/error/reload, abort), `ApplicationCard` (+ skeleton), `Dashboard` with summary strip and loading/empty/error states. Browser e2e 14/14 (incl. other customer's data hidden, retry). |
 | 3 | Multi-step application form | Done | **3c done:** Step 4 review & submit — summary with Edit links, repayment range (quotes at 5%/25%), declaration checkbox, idempotent submit (one key per visit, reused on retry; lost-response test → 1 submission), actionable APPLICATION_INCOMPLETE errors. Full browser journey E2E 16/16. **3a:** wizard shell at `/applications/new` (URL-driven `?draft=&step=`, Stepper, loading/404/non-draft states) + Step 1 loan details (Zod dollars→cents, purpose select + Other, POST then PATCH, API errors mapped to fields, calculator pre-fill). `TextField` prefix, `SelectField`. E2E 21/21. **3b done:** Step 2 employment & income (adaptive employer/business field, $0 allowed, cents, per-month hint, shared `StepActions`). E2E 17/17. |
 | 4 | Document upload | Done | Wizard Step 3: `DocumentUploadRow` per type (button + drag-and-drop, client type/size check, friendly API error codes), `DocumentFileItem` (View = authenticated Blob download), Continue gated on ID + PAYSLIP. E2E 15/15 (0 requests for bad files, server catches disguised .exe, drag-drop, exact-bytes download). |
-| 5 | Application detail (status timeline + schedule) | Todo | |
+| 5 | Application detail (status timeline + schedule) | Done | `/applications/[id]` (Suspense + `useParams`, Partial Prerender): banners (submitted / draft / declined reason), loan stats, `RepaymentSchedule` (next payment, accessible table, totals, CSV export), details, documents, `StatusTimeline`. Layouts wrap guard in Suspense (usePathname runtime data). Fixed grid min-content mobile overflow. E2E 18/18 + full journey 17/17. |
 
 **Done when:** a customer can complete the whole application flow in the browser.
 
@@ -141,6 +141,6 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 6 — Admin review
 - [x] Phase 7 — Backend tests
 - [x] Phase 8 — Frontend setup & auth
-- [ ] Phase 9 — Customer UI
+- [x] Phase 9 — Customer UI
 - [ ] Phase 10 — Admin UI
 - [ ] Phase 11 — DevOps & polish

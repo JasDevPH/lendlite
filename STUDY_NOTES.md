@@ -2407,4 +2407,62 @@ Real browser, **16/16**:
 
 ---
 
-<!-- Next: 9.5 application detail (status timeline + schedule) -->
+## 9.5 Application detail — status timeline + repayment schedule
+
+### What it does
+- **`/applications/[id]`** (`app/(customer)/applications/[id]/page.tsx`): `ApplicationDetail` inside `<Suspense>`; the id comes from `useParams()`.
+- **`ApplicationDetail`:**
+  - **Header:** ← My applications, purpose, amount, term, short reference, `StatusBadge`.
+  - **Contextual banners:** "Application submitted" (when arriving with `?submitted=1`), "Continue application" (draft), **declined reason** (rejected).
+  - **"Your loan" stats (approved):** rate, monthly payment, total interest, total repayable.
+  - **Cards:** Repayment schedule (approved), Your details, Documents (`DocumentFileItem` + View); **Progress** timeline in a sidebar.
+  - **States:** loading skeleton, **404** "Application not found" (also for others' applications), errors with retry.
+- **`StatusTimeline`:** Started → Submitted → Under review → Approved / **Declined (✕, red)** with dates; `aria-current="step"`; screen-reader text for each state.
+- **`RepaymentSchedule`:**
+  - **"Next payment"** banner (first installment due today or later, highlighted in the table).
+  - **Table:** semantic `<table>` with `<caption>`, `scope`, a `tfoot` totals row, tabular numbers; scrolls sideways *inside its box* on phones.
+  - **Download schedule (CSV):** plain decimal numbers and ISO dates, built client-side as a Blob.
+- **Layouts:** `(customer)` and `admin` layouts now wrap the guard in `<Suspense>`.
+
+### Why
+- **Customers see milestones, not the internal audit log:** the timeline is derived from status + dates. The detailed audit trail (who did what) stays admin-only.
+- **Explain the outcome:** a declined customer sees the reason (required by the API at rejection) and an encouraging next step. Transparency matters in lending.
+- **The schedule is the product:** after approval, the most important question is "what do I pay and when?", hence the next-payment highlight, totals that reconcile (Σprincipal = loan, final balance $0.00), and a CSV export for budgeting tools.
+- **Accessible tables:** caption + `scope` headers let screen readers announce "Due date: 19 Nov 2026" for each cell.
+- **Next 16 runtime data needs Suspense:**
+  - `[id]` isn't known at build time, so params are runtime data: read inside `<Suspense>`.
+  - The guard/header's `usePathname()` on a dynamic route is runtime data too. The **build failed** until the layouts wrapped them in Suspense.
+  - The page is now **Partial Prerender (◐)**: a static shell + streamed dynamic content.
+- **React purity:** the `react-hooks/purity` lint rule rejected `Date.now()` in render (re-renders would give different results). "Now" is captured once with `useState(() => Date.now())`.
+- **Classic CSS grid bug (caught by a test):** a single-column grid's implicit track sizes to its content's *minimum* width, so the 640 px table made the **whole page** scroll sideways on phones. `grid-cols-1` (= `minmax(0, 1fr)`) + `min-w-0` lets the column shrink, so only the table scrolls.
+
+### How to test
+Real browser, **18/18**: the same application driven through every status with the admin API:
+- **Submitted:** banner, $10,000 / 12 months / "Submitted"; timeline started ✓ + submitted current; documents with View; no schedule yet.
+- **Under review:** that step is current.
+- **Approved:**
+  - 12.00% p.a., **$888.49/month**, interest **$661.86**, total $10,661.86.
+  - 12 rows, last balance $0.00; totals reconcile.
+  - "Next payment: Installment 1 of 12, $888.49"; Approved ✓.
+  - **CSV:** header + 12 rows, `1,2026-11-19,888.49,788.49,100.00,9211.51`, last balance `0.00`.
+- **Navigation:** dashboard "View repayment schedule" → this page.
+- **Declined:** reason shown, timeline ✕ Declined.
+- **Draft:** "Continue application" link. **Someone else's:** "Application not found".
+- **Layout:** **no page overflow on mobile** (after the grid fix); no JS errors.
+
+Plus the **full journey (17/17)**: register → 4-step form → submit → **lands on this page with the confirmation**.
+
+### Interview points
+- *"How do you present a repayment schedule?"* — An accessible table (caption, scoped headers, tabular numbers), a highlighted next payment, a reconciling totals row, a mobile-safe horizontal scroll, and CSV export.
+- *"What's Partial Prerendering?"* — Next serves a static HTML shell instantly and streams the dynamic parts (inside Suspense boundaries) when ready. Dynamic route params and URL data are 'runtime data' and must sit behind Suspense.
+- *"Tell me about a CSS bug you fixed."* — The grid implicit-column min-content issue: a wide table pushed the whole page wider on mobile. Fixed with `minmax(0,1fr)` + `min-w-0`, caught by an automated "no horizontal overflow" check.
+
+---
+
+# ✅ Phase 9 complete
+
+Customer UI: live calculator, dashboard with status badges and all states, a 4-step URL-driven application wizard (draft saved from step 1, validated steps, document upload with drag-and-drop, review with an honest repayment range and idempotent submit), and an application page with timeline and repayment schedule. **A customer can complete the whole flow in the browser**, verified end to end, including the lost-response idempotency case.
+
+---
+
+<!-- Next: Phase 10.1 admin stats cards -->
