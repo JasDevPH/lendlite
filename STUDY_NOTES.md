@@ -2365,4 +2365,46 @@ Real browser, **15/15**:
 
 ---
 
-<!-- Next: 9.3c review & submit -->
+## 9.3c Step 4 — Review & submit (idempotent)
+
+### What it does
+- **`ReviewStep`:**
+  - **Summary card:** amount, term, and an **estimated repayment range**, from two real quotes at the lowest (5%) and highest (25%) rates.
+  - **Three sections** with **Edit** links back to their step: Loan details, Employment & income (employer row hidden if not working), Documents (`DocumentFileItem` with View).
+  - **Declaration checkbox:** "Submit application" stays disabled until it's ticked.
+  - **Submit:** `POST /applications/:id/submit` with an **`Idempotency-Key`** created once (`crypto.randomUUID()` in a `useRef`) and **reused for every retry**.
+  - **Errors become helpful messages:**
+    - `APPLICATION_INCOMPLETE` → a list of what's missing, with "add it" / "upload it" buttons that jump to the right step.
+    - `INVALID_STATUS_TRANSITION` → "Already submitted".
+    - Network error → "You can safely try again".
+  - **On success:** `router.replace('/applications/:id?submitted=1')` (replace, so Back doesn't return to the form).
+- **Wizard:** all four steps are real; the temporary placeholder was removed.
+
+### Why
+- **Review before an irreversible action:** submitted applications are locked (API 409). Showing everything with Edit links reduces mistakes and support requests.
+- **A range, not a made-up number:** the rate is only known at approval. Showing the repayment at both ends of the possible range is honest and still useful (responsible-lending tone).
+- **Declaration checkbox:** standard in credit applications; the applicant confirms the information is true.
+- **The idempotency key lives in a `useRef`:** it's created once per visit and survives re-renders. A *new* key per click would defeat the purpose.
+- **The scenario this protects against (tested for real):** the request reaches the server and the application is submitted, **but the response is lost** (wifi drops). The user sees an error and clicks again. With the same key, the API **replays** the original success (`Idempotent-Replayed: true`) instead of returning a confusing 409, and there's still **exactly one** submission.
+- **Map error codes to actions:** "Recent payslip — upload it" with a button is far more useful than "400 Bad Request".
+- **`router.replace` after submit:** the Back button shouldn't land on a now-locked form.
+
+### How to test
+Real browser, **16/16**:
+- **Full journey in the browser:** register → New application → step 1 → step 2 → upload ID + payslip → review.
+- **Review content:** shows every answer and both documents; range `$539.48 – $715.68` = real API quotes at 5% / 25%; Submit disabled until the declaration is ticked; "Edit" → step → back to review.
+- **Lost response:**
+  - Simulated (request processed by the server, response dropped) → "You can safely try again".
+  - Retry → **same key**, API **replays** (`Idempotent-Replayed: true`) → **exactly one** SUBMITTED audit row → redirected to the application.
+- **After submit:** the form is locked; dashboard shows "Submitted".
+- **Incomplete draft:** missing documents listed; "upload it" → documents step.
+- **Layout:** no mobile overflow; no JS errors; uploaded test files cleaned up.
+
+### Interview points
+- *"How does idempotency work end to end in your app?"* — The client generates one key per submit intent and reuses it on retries. The server stores it with the submission in the same transaction; a repeat with the same key returns the original result. I tested the nasty case: the request succeeded but the response was lost, and the retry was safely replayed.
+- *"Why keep the key in a ref, not state or a new value per click?"* — It must stay stable across re-renders and retries; a ref holds a value without causing renders.
+- *"How do you turn API errors into good UX?"* — Stable error codes plus structured details (`missingFields`, `missingDocuments`) let the UI show exactly what to fix, with a link to fix it.
+
+---
+
+<!-- Next: 9.5 application detail (status timeline + schedule) -->

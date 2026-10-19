@@ -11,6 +11,7 @@ import { useApi } from '@/lib/useApi';
 import { DocumentsStep } from './DocumentsStep';
 import { EmploymentStep } from './EmploymentStep';
 import { LoanDetailsStep } from './LoanDetailsStep';
+import { ReviewStep } from './ReviewStep';
 import { Stepper, type StepDefinition } from './Stepper';
 
 // Spec: 1) Loan details 2) Employment & income 3) Documents 4) Review & submit
@@ -125,29 +126,15 @@ export function ApplicationWizard() {
             onContinue={() => goTo('review')}
             onChanged={reload}
           />
-        ) : (
-          <ComingNextStep label={STEPS[stepIndex]!.label} onBack={() => goTo(STEPS[stepIndex - 1]!.key)} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// TEMPORARY: steps 2–4 are built one at a time next (spec: one component at a time)
-function ComingNextStep({ label, onBack }: { label: string; onBack: () => void }) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-ink">{label}</h2>
-        <p className="mt-1 text-sm text-muted">This step is being built next. Your loan details have been saved as a draft.</p>
-      </div>
-      <div className="flex gap-3 border-t border-line pt-6">
-        <Button variant="secondary" onClick={onBack}>
-          ← Back
-        </Button>
-        <Link href="/dashboard" className={buttonClasses({ variant: 'ghost' })}>
-          Save &amp; exit
-        </Link>
+        ) : step === 'review' && application ? (
+          <ReviewStep
+            key={application.id}
+            application={application}
+            onEdit={(target) => goTo(target)}
+            // Done: show the submitted application (replace: Back shouldn't return to the form)
+            onSubmitted={(submitted) => router.replace(`/applications/${submitted.id}?submitted=1`)}
+          />
+        ) : null}
       </div>
     </div>
   );
