@@ -100,7 +100,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 |---|---|---|---|
 | 1 | Jest config + test DB setup | Done | Jest 30 + ts-jest + Supertest. Test DB `lendlite_test` on local Docker (override `TEST_DATABASE_URL`), `_test` name guard, `migrate deploy` in globalSetup, env set before app load, `resetDb()` TRUNCATE helper, serial run. Smoke test (health) passes. |
 | 2 | Amortization unit tests | Done | `tests/unit/amortization.test.ts` (20: spec example 88849 + final balance 0, 0%, invalid inputs, dates, seeded 1,000-loan property test) + `money.test.ts` (6). Mutation check: breaking the remainder rule → 5 failures. |
-| 3 | Auth integration tests | Todo | |
+| 3 | Auth integration tests | Done | `tests/auth.test.ts` (16): register/login/me, 409/400/401 cases, hash stored, role ignored, identical 401s, expired/forged/deleted-user tokens, 6th login → 429. Added `tests/helpers/factories.ts` and resettable rate-limit stores (`resetRateLimits()`). Full suite 44/44, stable across runs. |
 | 4 | Application flow integration tests | Todo | |
 
 **Done when:** `npm test` passes with all of the above.

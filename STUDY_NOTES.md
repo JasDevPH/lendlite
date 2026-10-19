@@ -1729,4 +1729,46 @@ npx jest tests/unit --verbose  # list every test name
 
 ---
 
-<!-- Next: 7.3 auth integration tests -->
+## 7.3 Auth integration tests (`tests/auth.test.ts`)
+
+### What it does
+16 tests that send **real HTTP requests** through Supertest → Express → services → the `lendlite_test` Postgres:
+
+| Area | Tests |
+|---|---|
+| **register** | 201 CUSTOMER + token, email normalised, no `passwordHash` · DB stores a `$2b$12$` hash, never the plain password · `role: "ADMIN"` ignored · duplicate (case-insensitive) → 409 `EMAIL_TAKEN` · invalid → 400 with `email`/`password`/`fullName` details |
+| **login** | token works for `/auth/me` (email case-insensitive) · wrong password and unknown email → **identical** 401 bodies · missing fields → 400 |
+| **/auth/me** | valid → 200 · no header / `Basic` / garbage → 401 (`it.each`) · expired → 401 · forged with another secret → 401 · user deleted → 401 |
+| **rate limit** | 5 failed logins, then the 6th **with the correct password** → 429 `RATE_LIMITED` + `Retry-After` |
+
+Supporting changes:
+- **`tests/helpers/factories.ts`:**
+  - `createUser()` / `createAdmin()` insert users directly (unique emails).
+  - `authHeader(user)` signs a real JWT without calling `/login`.
+- **`rateLimit.ts`:** each limiter now has an explicit `MemoryStore`, plus an exported `resetRateLimits()`.
+- `beforeEach`: `resetDb()` + `resetRateLimits()`.
+
+### Why
+- **Integration > unit for auth:** the risk is in the wiring (middleware order, validation, hashing, JWT checks, error format). Only a real request through the full stack proves it.
+- **Each test sets up its own data (Arrange → Act → Assert)** after a full reset, so tests don't depend on order. Verified by running the whole suite twice: 44/44 both times.
+- **Factories vs HTTP for setup:** creating users directly is faster and keeps each test focused on the one endpoint it tests. `authHeader()` avoids burning login attempts on the rate limiter.
+- **Why `resetRateLimits()`:** limiter counters live in memory for the whole test file. Without a reset, logins from earlier tests would cause random 429s later (a classic *flaky test*). Explicit stores make the state resettable. In production the same seam is where a Redis store plugs in.
+- **Asserting identical bodies** for wrong password vs unknown email *encodes the security requirement* (no user enumeration) as a test, so a future refactor can't silently break it.
+- **Testing the DB, not just the response:** the hash check (`$2b$12$…`) proves passwords are stored correctly, which the HTTP response alone can't show.
+
+### How to test
+```powershell
+docker compose up -d db
+cd api
+npx jest tests/auth.test.ts      # 16 passed
+npm test                         # whole suite: 44 passed
+```
+
+### Interview points
+- *"How do you test authentication?"* — End-to-end with Supertest against a real test DB: happy paths plus every rejection (expired, forged, malformed, deleted-user tokens), and security properties like no user enumeration and rate limiting.
+- *"How do you avoid flaky tests?"* — Reset all shared state before each test (DB *and* in-memory state like rate-limit counters), no reliance on test order or timing, deterministic data.
+- *"Why test that the DB stores a hash?"* — Some requirements aren't visible in the API response. Asserting on persisted state catches "it works but it's insecure" bugs.
+
+---
+
+<!-- Next: 7.4 application flow integration tests -->
