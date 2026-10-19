@@ -28,20 +28,20 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **Neon (serverless Postgres, Sydney) for the dev database** — added at user request. Docker Compose Postgres remains for the Phase 11 "fresh clone" setup.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
 
-## Phase 2 — Database schema (in progress)
+## Phase 2 — Database schema ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | `prisma/schema.prisma` | Done | Prisma **6.19** (stable; 8 is RC, 7 needs adapter/config). 3 enums, 5 models per spec + FK indexes on `Document.applicationId` and `AuditLog(applicationId, createdAt)`. `overrides: deepmerge-ts ^8` fixes a CLI-only vuln → `npm audit` 0. Validated + client generated. |
 | 2 | First migration | Done | `20261019042311_init` applied to **Neon** (`migrate dev`) and **Docker** (`migrate deploy`); both in sync. Scripts: `db:migrate`, `db:deploy`, `db:studio`. |
 | 3 | `lib/prisma.ts` | Done | Singleton PrismaClient, logs via pino (SQL queries at debug in dev). `/health` pings DB (`SELECT 1`) → 200 `database: ok` or 503 `SERVICE_UNAVAILABLE`. `$disconnect()` on shutdown. Verified on Neon, Docker, and Docker stopped. |
-| 4 | `prisma/seed.ts` | Todo | |
+| 4 | `prisma/seed.ts` | Done | Upserts `admin@lendlite.dev` / `customer@lendlite.dev` with bcrypt cost 12. Idempotent; refuses to run in production. `npm run db:seed`. `typecheck` now also covers `prisma/`. Seeded on Neon + Docker. |
 
 **Done when:** `npx prisma migrate dev` succeeds, `npx prisma db seed` creates both users, `/health` reports DB ok.
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation
-- [ ] Phase 2 — Database schema
+- [x] Phase 2 — Database schema
 - [ ] Phase 3 — Authentication
 - [ ] Phase 4 — Calculator + applications
 - [ ] Phase 5 — Documents

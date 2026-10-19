@@ -440,4 +440,56 @@ Verified: Neon → 200, Docker → 200, Docker stopped → 503 with the error lo
 
 ---
 
-<!-- Next: 2.4 prisma/seed.ts -->
+## 2.4 `prisma/seed.ts`
+
+### What it does
+Creates the two demo users from the spec:
+
+| Email | Password | Role |
+|---|---|---|
+| `admin@lendlite.dev` | `Admin1234` | ADMIN |
+| `customer@lendlite.dev` | `Customer1234` | CUSTOMER |
+
+- Hashes each password with **bcrypt, cost 12**.
+- Uses **`upsert` by email**: creates the user if missing, otherwise resets them to the known demo values. Running it twice never creates duplicates.
+- **Refuses to run when `NODE_ENV=production`.**
+- Always calls `prisma.$disconnect()` (in `.finally`), and sets `process.exitCode = 1` on failure.
+- Wired up via `package.json` → `"prisma": { "seed": "tsx prisma/seed.ts" }`, so `npx prisma db seed` (or `npm run db:seed`) runs it. Prisma also runs it automatically after `prisma migrate reset`.
+- `prisma/tsconfig.json` makes `npm run typecheck` cover `seed.ts` too.
+
+### Why
+- **Never store plain passwords; hash them.** If the DB leaks, attackers get hashes, not passwords.
+- **Why bcrypt (not SHA-256)?** bcrypt is *deliberately slow* and *salted*:
+  - **Salt:** a random value is stored inside the hash, so two users with the same password get different hashes. That defeats precomputed "rainbow tables".
+  - **Cost factor:** cost 12 = 2¹² rounds ≈ 200ms per hash. That's fine for one login but makes billions of guesses impractical. SHA-256 is built to be fast, which is exactly what attackers want. Raise the cost as hardware gets faster.
+  - The hash format `$2b$12$…` stores the algorithm version, cost and salt, so `bcrypt.compare` needs nothing else.
+- **`bcrypt` (native) vs `bcryptjs` (pure JS):** same algorithm. Native is faster, which matters at cost 12. It installed cleanly with prebuilt binaries for Node 24.
+- **Idempotent seed (upsert):** safe to re-run anytime (after a reset, on a new DB, in CI) without "unique constraint failed on email" errors.
+- **Production guard:** known demo passwords like `Admin1234` in production would be an instant admin takeover.
+- **`process.exitCode` instead of `process.exit(1)`:** lets `.finally()` still disconnect before the process ends.
+- *Note:* Prisma 6 warns that `package.json#prisma` is deprecated (in favour of `prisma.config.ts` in Prisma 7). It still works fine on Prisma 6.
+
+### How to test
+```powershell
+cd api
+npm run db:seed        # → ✔ ADMIN admin@lendlite.dev / ✔ CUSTOMER customer@lendlite.dev / Seed complete
+npm run db:seed        # run again → same 2 users, no duplicates
+npm run db:studio      # User table: 2 rows, passwordHash starts with $2b$12$
+```
+Verified on Neon and Docker: 2 users, hashes `$2b$12$…` (60 chars), `bcrypt.compare('Admin1234', hash)` → true, wrong password → false, production guard exits 1.
+
+### Interview points
+- *"How do you store passwords?"* — Never plaintext and never a fast hash. Use a slow, salted algorithm (bcrypt, or argon2/scrypt) with a tunable cost. We use bcrypt cost 12, and the hash is never returned by the API.
+- *"What is a salt and why does it matter?"* — Random data mixed in per password, so identical passwords produce different hashes and rainbow tables are useless.
+- *"Why is a slow hash good?"* — The legitimate user pays ~200ms once per login. An attacker trying billions of guesses pays it billions of times.
+- *"How do you seed data safely?"* — Idempotent upserts, demo-only data, and an explicit guard against running in production.
+
+---
+
+# ✅ Phase 2 complete
+
+Prisma schema (5 models, 3 enums, indexes), initial migration applied to both Neon and Docker, shared Prisma client, `/health` with DB check (200/503), and idempotent seed of admin + customer users.
+
+---
+
+<!-- Next: Phase 3.1 auth.schema.ts -->
