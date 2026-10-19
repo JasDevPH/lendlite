@@ -1,0 +1,12 @@
+# Keep the build context small and secret-free
+node_modules
+dist
+coverage
+uploads
+tests
+scripts
+.env
+.env.*
+*.log
+Dockerfile
+.dockerignore

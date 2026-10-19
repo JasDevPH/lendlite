@@ -14,6 +14,9 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   UPLOAD_DIR: z.string().default('./uploads'),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(5),
+  // Number of reverse proxies in front of the API (Railway = 1). 0 locally: trusting
+  // X-Forwarded-For without a proxy would let clients fake their IP and dodge the rate limiter.
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 });
 
 export type Env = z.infer<typeof envSchema>;

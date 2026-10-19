@@ -144,6 +144,19 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** an admin can review and decide applications in the browser.
 
+## Phase 11 — DevOps & polish (in progress)
+
+**Deploy target: Railway** (via the local Railway CLI).
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | API Dockerfile | Done | Multi-stage `api/Dockerfile` (node:20-bookworm-slim + openssl; build → prod-deps `npm ci --omit=dev` → runtime), non-root `node` user, writable `uploads/`, Docker `HEALTHCHECK` on `/health`, CMD `prisma migrate deploy && exec node dist/server.js`. `.dockerignore` (no `.env`, tests, scripts). Railway prep: `prisma` CLI moved to dependencies (migrations at deploy), `TRUST_PROXY` env (0 local / 1 Railway) → `app.set('trust proxy')`. Verified: container healthy, DB ok, login works, runs as `node`, SIGTERM → graceful exit 0. Typecheck + 85/85 tests. |
+| 2 | Web Dockerfile | Todo | |
+| 3 | Full docker-compose | Todo | |
+| 4 | GitHub Actions CI | Todo | |
+| 5 | README | Todo | |
+| 6 | Deploy to Railway | Todo | |
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema

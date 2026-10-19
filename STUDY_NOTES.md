@@ -2683,5 +2683,52 @@ Admin UI: a stats overview (raw-SQL stats, validated colour-blind-safe pipeline 
 
 ---
 
-<!-- Next: Phase 11 — DevOps & polish -->
+# Phase 11 — DevOps & polish
+
+Deploy target: **Railway** (via the Railway CLI). Every image is built to run the same way locally (docker compose) and on Railway.
+
+## 11.1 API Dockerfile
+
+### What it does
+- **`api/Dockerfile`, multi-stage:**
+  - `base`: `node:20-bookworm-slim` + `openssl` (Prisma's engine needs it for TLS to Postgres).
+  - `build`: `npm ci` (all deps) → `prisma generate` → `tsc` → `dist/`.
+  - `prod-deps`: `npm ci --omit=dev` → only runtime packages (no jest/tsx).
+  - `runtime`: copies `node_modules` + `dist` + `prisma/`, runs as the non-root **`node`** user, creates a writable `uploads/`.
+- **Start command:** `prisma migrate deploy && exec node dist/server.js`. Pending migrations are applied on every deploy, then the server starts.
+- **`HEALTHCHECK`** calls `/api/v1/health` (which also checks the DB). Docker compose uses it to know when the API is really ready.
+- **`.dockerignore`** keeps `.env`, `node_modules`, tests, scripts and uploads out of the build context.
+- **Railway prep:**
+  - `prisma` (the CLI) moved from devDependencies to **dependencies**, because `migrate deploy` runs inside the production image.
+  - New **`TRUST_PROXY`** env var (0 locally, 1 on Railway) → `app.set('trust proxy', …)`.
+
+### Why
+- **Multi-stage:** the compiler and test tools are needed to *build* but not to *run*. Leaving them out gives a smaller image with fewer packages that could have vulnerabilities.
+- **Debian slim, not Alpine:** bcrypt and Prisma ship prebuilt binaries for glibc. Alpine (musl) can need compilers or different engines, which is a classic source of "works locally, crashes in Docker".
+- **Layer caching:** `package*.json` is copied before the source. Editing code doesn't re-run `npm ci`; only dependency changes do.
+- **Non-root user:** if the app were compromised, the attacker isn't root inside the container.
+- **`exec node`:** node becomes PID 1, so it receives the platform's `SIGTERM` directly. `server.ts`'s graceful shutdown (finish in-flight requests, close DB pool) actually runs. Without `exec`, `sh` would swallow the signal and the container would be killed after a timeout.
+- **`migrate deploy` (not `migrate dev`):** applies existing migration files only. It never generates new ones or resets data, which is safe for production.
+- **Trust proxy:** on Railway every request arrives via their proxy. Without trusting it, `req.ip` is the proxy's IP, so **all users share one login rate limit** (5/min for the whole internet). The setting is kept at 0 locally, because trusting `X-Forwarded-For` with no proxy would let a client fake its IP and bypass the limiter.
+
+### How to test
+```bash
+cd api
+docker build -t lendlite-api .
+docker compose up -d db          # from repo root
+docker run --rm --network lendlite_default -p 4011:4001 \
+  -e DATABASE_URL=postgresql://lendlite:lendlite@lendlite-db:5432/lendlite \
+  -e JWT_SECRET=<64+ random chars> -e WEB_ORIGIN=http://localhost:3000 lendlite-api
+curl localhost:4011/api/v1/health   # {"data":{"status":"ok","database":"ok",...}}
+```
+Verified: the container becomes `healthy`, login returns a token, it runs as user `node`, there are no jest/tsx in `node_modules`, and `docker stop` → "Shutting down" log + exit code 0. Typecheck passes; 85/85 tests.
+
+### Interview points
+- *"Walk me through your Dockerfile."* — Multi-stage: build with dev deps, ship only prod deps + compiled JS. Non-root user, healthcheck, migrations on start, `exec` for proper signal handling.
+- *"How do database migrations run in production?"* — `prisma migrate deploy` at container start applies committed migration files in order. It's idempotent, so already-applied ones are skipped.
+- *"Why `trust proxy`?"* — Behind a load balancer, the client IP is in `X-Forwarded-For`. Rate limiting and logs need the real IP, but you only trust that header when you know a proxy sets it.
+
+---
+
+<!-- Next: 11.2 web Dockerfile -->
 

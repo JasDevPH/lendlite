@@ -17,6 +17,10 @@ import { AppError } from './utils/AppError';
 // can import it and fire requests without opening a real port.
 export const app = express();
 
+// Behind a proxy (Railway), req.ip must come from X-Forwarded-For, or every
+// user shares the proxy's IP and one login limit (see TRUST_PROXY in env.ts)
+app.set('trust proxy', env.TRUST_PROXY);
+
 // Security headers (no X-Powered-By, nosniff, frame protection, etc.)
 app.use(helmet());
 // Only our web frontend may call the API from a browser
