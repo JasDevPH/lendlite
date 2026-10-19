@@ -52,6 +52,21 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** register, login, and `/auth/me` work via curl; wrong password → 401; 6th login in a minute → 429.
 
+## Phase 4 — Calculator + loan applications (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | `utils/money.ts` | Done | `Cents`/`BasisPoints` types, `isValidCents`, `roundToCents` (throws on NaN/∞), `bpsToDecimal`, `dollarsToCents`, `formatAUD` (en-AU). |
+| 2 | `utils/amortization.ts` | Todo | |
+| 3 | Calculator module | Todo | |
+| 4 | Applications schema | Todo | |
+| 5 | Applications service (create/list/get/update, ownership + status rules) | Todo | |
+| 6 | Applications controller/routes | Todo | |
+| 7 | Submit with idempotency | Todo | |
+| 8 | Audit log helper | Todo | |
+
+**Done when:** a customer can create, edit, and submit a draft; editing after submit → 409; repeated submit with same key returns same result.
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema

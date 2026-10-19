@@ -784,4 +784,51 @@ Register/login/me endpoints with Zod validation, bcrypt hashing, JWT (HS256, 1h,
 
 ---
 
-<!-- Next: Phase 4.1 utils/money.ts -->
+# Phase 4 — Calculator + loan applications
+
+## 4.1 `utils/money.ts`
+
+### What it does
+Small, pure helpers for the "money is integer cents, rates are basis points" rule:
+
+| Helper | Example | Used for |
+|---|---|---|
+| `Cents`, `BasisPoints` types | `amount: Cents` | Readability (still `number` at runtime) |
+| `isValidCents(n)` | `1500.5` → false | Guarding inputs/outputs |
+| `roundToCents(x)` | `8884.878867` → `8885` | Turning calculated values back into whole cents |
+| `bpsToDecimal(bps)` | `1250` → `0.125` | Feeding rates into the amortization formula |
+| `dollarsToCents(d)` | `19.99` → `1999` | Tests and readable seed data |
+| `formatAUD(cents)` | `123456` → `"$1,234.56"` | Logs and messages only |
+
+### Why
+- **Floats can't represent most decimals exactly.** `0.1 + 0.2 = 0.30000000000000004` and `19.99 * 100 = 1998.9999999999998`. Integer cents are exact: `10 + 20 = 30`.
+- **Basis points:** whole numbers for rates (12.50% = 1250 bps), the standard unit in finance. They're stored exactly, with no `0.125` float in the DB.
+- **Floats only exist *inside* a calculation** (the amortization formula needs powers and division). Results are immediately rounded to whole cents with `roundToCents`.
+- **`Number.isSafeInteger`:** whole *and* within ±2⁵³ (≈ ±9 quadrillion cents), the range where JS integers are exact.
+- **`Math.round` rounds .5 up:** fine for positive loan amounts. (Banks sometimes use *banker's rounding*, i.e. round half to even, to avoid upward bias over millions of transactions. Good to mention.)
+- **`roundToCents` throws on `NaN`/`Infinity`:** a bad calculation should fail loudly, not silently store `NaN` as money.
+- **API returns raw cents; formatting is the frontend's job** (`Intl.NumberFormat('en-AU', AUD)`). `formatAUD` here is only for human-readable logs.
+- **One formatter instance** is created once and reused (building `Intl.NumberFormat` is relatively expensive).
+
+### How to test
+Verified with a throwaway script:
+```
+0.1 + 0.2                 → 0.30000000000000004   (why we avoid floats)
+dollarsToCents(19.99)     → 1999
+roundToCents(8884.878867) → 8885
+bpsToDecimal(1250)        → 0.125
+formatAUD(5000000)        → "$50,000.00"
+isValidCents(1500.5)      → false
+roundToCents(Infinity)    → throws RangeError
+```
+(Proper Jest unit tests come in Phase 7.)
+
+### Interview points
+- *"Why integer cents instead of floats?"* — Floats are binary approximations, so errors appear and compound through interest calculations. Integers are exact. Alternatives: `NUMERIC`/`DECIMAL` in Postgres plus a decimal library (e.g. decimal.js) in JS.
+- *"What's a basis point?"* — 1/100th of a percent (0.01%). 1250 bps = 12.5%. It's the standard way finance quotes rates and rate changes ("the RBA raised rates by 25 bps").
+- *"Where do you round?"* — At the edge of each calculation step, back to whole cents, and consistently (here: per installment, with the last installment absorbing the remainder).
+- *"Where does formatting happen?"* — In the UI, with the user's locale. APIs exchange raw integers so no precision is lost.
+
+---
+
+<!-- Next: 4.2 utils/amortization.ts -->
