@@ -736,4 +736,52 @@ Tested on a throwaway mini app (real admin routes come in Phase 6):
 
 ---
 
-<!-- Next: 3.6 rate limiter -->
+## 3.6 `middleware/rateLimit.ts` (express-rate-limit)
+
+### What it does
+Two limiters, both counting **per IP per 1-minute window**:
+
+| Limiter | Applied to | Limit | Over the limit |
+|---|---|---|---|
+| `loginLimiter` | `POST /auth/login` | **5/min** (spec) | 429 `RATE_LIMITED` "Too many login attempts…" |
+| `authLimiter` | every `/auth/*` route | 30/min | 429 `RATE_LIMITED` "Too many requests…" |
+
+- The custom `handler` sends the 429 through our `errorHandler`, keeping the usual `{ error: { code, message } }` shape.
+- Response headers tell clients their quota: `RateLimit: "5-in-1min"; r=0; t=53` (r = remaining, t = seconds until reset) and `Retry-After: 53`.
+- Route order: `loginLimiter → validate → controller`.
+
+### Why
+- **Brute-force defence:** without a limit, an attacker can try thousands of passwords per minute. With 5/min, guessing even a weak password becomes impractically slow.
+- **It counts *all* attempts, not just failures:** our test's 6th attempt used the *correct* password and was still blocked. Otherwise an attacker could interleave a known-good login to reset the count.
+- **Limiter before validation and bcrypt:** a blocked request costs microseconds instead of a ~200ms bcrypt hash. It also protects the CPU (bcrypt is deliberately expensive, so unlimited logins = cheap DoS).
+- **Looser `/auth/*` limit:** stops scripted mass registration and enumeration via register's 409, without bothering real users.
+- **429 + `Retry-After`:** the standard HTTP way to say "slow down", so clients can back off automatically.
+- **Limitations (good to admit in an interview):**
+  - **In-memory store:** counts reset on restart and aren't shared between instances. With multiple servers you'd use **Redis** (`rate-limit-redis`).
+  - **Per-IP:** users behind one office NAT share a quota, and attackers can rotate IPs. Production systems add per-account limits, exponential backoff, CAPTCHA, or temporary lockout.
+  - **Behind a proxy/load balancer** (Render, AWS ALB), every request appears to come from the proxy's IP. You must set `app.set('trust proxy', 1)` so Express reads the real IP from `X-Forwarded-For`. That's a Phase 11 deploy step.
+
+### How to test
+```powershell
+# 6 logins within a minute — the 6th is 429 even with the right password
+1..6 | % { curl.exe -s -o NUL -w "%{http_code}`n" -X POST -H "Content-Type: application/json" `
+  --data-binary '@good.json' http://localhost:4001/api/v1/auth/login }
+# → 200 200 200 200 200 429   (wait 60s and it resets)
+```
+Verified: #1 200, #2–5 401 (wrong password), **#6 429** with `Retry-After: 53` and `RateLimit` headers. `/auth/me` still 200 meanwhile.
+
+### Interview points
+- *"How do you protect login from brute force?"* — Rate limiting per IP (and ideally per account), slow hashing (bcrypt), generic error messages, and in production lockout/CAPTCHA/MFA.
+- *"Why does your rate limiter run before validation?"* — Cheapest checks first: reject abusive traffic before spending CPU on parsing and bcrypt.
+- *"Would this work with 3 server instances?"* — Not accurately. Each has its own memory counter, so the effective limit is 15/min. Use a shared store like Redis.
+- *"What's `trust proxy`?"* — Behind a reverse proxy, the client IP is in `X-Forwarded-For`. Trust exactly the number of proxy hops you control, otherwise clients can spoof their IP and bypass limits.
+
+---
+
+# ✅ Phase 3 complete
+
+Register/login/me endpoints with Zod validation, bcrypt hashing, JWT (HS256, 1h, algorithm pinned), `requireAuth` (401) and `requireRole` (403) middleware, and rate limiting (5 logins/min → 429). Defences against user enumeration (same error, timing-safe), mass assignment (stripped fields), `alg:none` forgery, and duplicate-email races.
+
+---
+
+<!-- Next: Phase 4.1 utils/money.ts -->

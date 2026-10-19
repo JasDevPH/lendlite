@@ -39,7 +39,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** `npx prisma migrate dev` succeeds, `npx prisma db seed` creates both users, `/health` reports DB ok.
 
-## Phase 3 — Authentication (in progress)
+## Phase 3 — Authentication ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -48,14 +48,14 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 3 | `auth.controller.ts` + routes | Done | `POST /auth/register` (201) and `POST /auth/login` live. Added `utils/asyncHandler.ts`, `middleware/validate.ts` (parsed output replaces req parts), `types/express.d.ts` (`req.user`). `me` controller ready; its route lands with the auth middleware. Verified via curl: 201/409/400/200/401/400. |
 | 4 | `middleware/auth.ts` | Done | `requireAuth`: parses `Bearer` header (case-insensitive), verifies JWT, sets `req.user = {id, role}`; 401 otherwise. `GET /auth/me` live. Verified 8 header/token cases. |
 | 5 | `middleware/requireRole.ts` | Done | `requireRole(...roles)` factory → 403 `FORBIDDEN` on wrong role; 401 if `req.user` missing (fails closed). Tested on a throwaway app (admin routes come in Phase 6). |
-| 6 | Rate limiter | Todo | |
+| 6 | Rate limiter | Done | `express-rate-limit` v8: `loginLimiter` 5/min/IP on `/auth/login`, `authLimiter` 30/min/IP on all `/auth/*`. 429 `RATE_LIMITED` via errorHandler, `RateLimit` + `Retry-After` headers. In-memory store (Redis + `trust proxy` noted for deploy). Verified 6th login → 429. |
 
 **Done when:** register, login, and `/auth/me` work via curl; wrong password → 401; 6th login in a minute → 429.
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema
-- [ ] Phase 3 — Authentication
+- [x] Phase 3 — Authentication
 - [ ] Phase 4 — Calculator + applications
 - [ ] Phase 5 — Documents
 - [ ] Phase 6 — Admin review
