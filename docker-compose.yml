@@ -1,9 +1,21 @@
-# Local development stack.
-# Phase 1: Postgres only — the offline alternative to Neon.
-#   docker compose up -d db
-# Then point api/.env at it:
-#   DATABASE_URL=postgresql://lendlite:lendlite@localhost:5433/lendlite
-# (api + web services are added in Phase 11)
+# Full local stack: Postgres + API + web, from a fresh clone.
+#
+#   docker compose up --build        → http://localhost:3000 (API on :4001)
+#   docker compose up -d db          → just Postgres, for `npm run dev` (offline alternative to Neon)
+#   docker compose down              → stop (add -v to wipe the database + uploads)
+#
+# Startup order: db healthy → seed (migrate + demo users) → api healthy → web.
+# Demo logins: admin@lendlite.dev / Admin1234, customer@lendlite.dev / Customer1234
+#
+# Don't run `npm run dev` for the API at the same time: both want port 4001.
+
+# Shared by the seed job and the API, so both talk to the same database
+x-api-env: &api-env
+  # "db" is the service name: containers reach each other by name on the compose network
+  DATABASE_URL: postgresql://lendlite:lendlite@db:5432/lendlite
+  # Local-only default; override by putting JWT_SECRET=... in a root .env file (gitignored).
+  # Production secrets live in Railway's variables, never in this file.
+  JWT_SECRET: ${JWT_SECRET:-local-docker-only-secret-not-for-production-0123456789}
 
 services:
   db:
@@ -23,12 +35,59 @@ services:
     volumes:
       # Named volume: data survives `docker compose down` (use `down -v` to wipe it)
       - db-data:/var/lib/postgresql/data
-    # Lets other services (and `docker compose ps`) know when Postgres is actually ready
+    # Lets other services know when Postgres is actually ready, not just started
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U lendlite -d lendlite']
       interval: 5s
       timeout: 3s
       retries: 10
 
+  # One-shot job: apply migrations + create the demo users, then exit.
+  # Uses the Dockerfile's "build" stage, which still has tsx (the seed is TypeScript);
+  # the slim runtime image deliberately doesn't.
+  seed:
+    build:
+      context: ./api
+      target: build
+    environment: *api-env
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      NODE_ENV: production
+      PORT: 4001
+      # The browser calls the API from the web app's origin
+      WEB_ORIGIN: http://localhost:3000
+      STORAGE_DRIVER: local
+    ports:
+      - '127.0.0.1:4001:4001'
+    volumes:
+      # Uploaded documents survive container rebuilds
+      - uploads:/app/uploads
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ./web
+      args:
+        # Baked into the browser JS at build time. The BROWSER calls this URL,
+        # so it's the host's localhost, not the "api" service name.
+        NEXT_PUBLIC_API_URL: http://localhost:4001/api/v1
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   db-data:
+  uploads:

@@ -2812,5 +2812,39 @@ Browser test, **5/5**:
 
 ---
 
-<!-- Next: 11.4 full docker-compose -->
+## 11.4 Full docker-compose
+
+### What it does
+`docker compose up --build` runs everything from a fresh clone, then opens on http://localhost:3000. Startup order:
+1. **`db`:** Postgres 16. Healthy when `pg_isready` passes.
+2. **`seed`:** a one-shot job. It runs `prisma migrate deploy` + `prisma db seed` (demo admin + customer), then **exits**. It's built from the API Dockerfile's `build` stage, which still has `tsx`.
+3. **`api`:** starts only after the seed **completed successfully**. Uploads go to a named **`uploads` volume**.
+4. **`web`:** starts only after the API is **healthy**. It's built with `NEXT_PUBLIC_API_URL=http://localhost:4001/api/v1`.
+- `docker compose up -d db` still works for the old "just Postgres" setup used with `npm run dev`.
+
+### Why
+- **`depends_on` with conditions:** plain `depends_on` only waits for a container to *start*, not to be *ready*. `service_healthy` waits for the healthcheck; `service_completed_successfully` waits for a job to exit 0. That removes the "API crashed because the DB wasn't up yet" race.
+- **Seed as a separate job, using the build stage:** the production image is slim on purpose (no tsx). Instead of bloating it for a dev-only task, compose reuses an earlier stage of the same Dockerfile. The seed is an upsert, so running it on every `up` is safe.
+- **Service names as hostnames:** inside the compose network the API reaches Postgres at `db:5432`. The **browser**, however, runs on your machine, so the web build arg uses `localhost:4001`. This is a classic confusion: who is making the request decides which hostname works.
+- **YAML anchor (`x-api-env`):** seed and API must use the same DB URL and secret. Defining them once avoids drift.
+- **The JWT secret default is local-only:** the same idea as the committed `lendlite/lendlite` DB password. It's overridable via a gitignored root `.env`. Real secrets live in Railway variables.
+- **Ports bound to `127.0.0.1`:** they're reachable from this PC, not from the rest of the network.
+
+### How to test
+```bash
+docker compose up --build        # first build takes a few minutes
+# → http://localhost:3000, log in as customer@lendlite.dev / Customer1234
+docker compose ps -a             # seed: Exited (0); db/api/web: healthy
+docker compose down              # add -v to wipe DB + uploads
+```
+- `docker compose config` validates the file. Both images were tested individually (11.1, 11.3).
+- The full fresh-clone run needs more RAM than this 8 GB PC had free (Docker froze, then was stopped mid-build). It runs instead as a **CI job on GitHub's runners** (11.5): a clean machine on every push.
+
+### Interview points
+- *"How do you make services start in the right order?"* — Healthchecks plus `depends_on` conditions, not sleeps. A one-shot migration/seed job gates the API.
+- *"Why does the frontend use localhost but the API uses `db`?"* — Server-to-server calls happen inside the Docker network (service names). Browser calls come from the host (published ports).
+
+---
+
+<!-- Next: 11.5 GitHub repo + Actions CI -->
 
