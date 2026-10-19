@@ -1683,4 +1683,50 @@ npm run typecheck              # src + prisma + tests
 
 ---
 
-<!-- Next: 7.2 amortization unit tests -->
+## 7.2 Amortization + money unit tests (`tests/unit/`)
+
+### What it does
+**`amortization.test.ts`** (20 tests):
+- **`calculateMonthlyPayment`:**
+  - Spec example **88849** ($888.49).
+  - $50k / 25% / 60m → 146757.
+  - 0% → even split.
+  - 5 invalid inputs throw `RangeError` (via `it.each`).
+- **Spec schedule ($10k, 12%, 12m):**
+  - Numbered 1–12.
+  - Month 1 = $888.49 with $100.00 interest.
+  - **Final balance 0.**
+  - Last payment $888.47 (absorbs 2¢).
+  - Σprincipal = $10,000, total interest $661.86.
+  - First due date = start + 1 month.
+- **0% loan:** 33,333 / 33,333 / 33,334.
+- **Property test:** 1,000 loans from a **seeded** random generator. For each: length = term, final balance 0, Σprincipal = loan, every amount a whole cent ≥ 0, payment = principal + interest.
+- **`addMonths`:** month-end clamping (Feb 29 in a leap year, Apr 30, Feb 28), **no drift** (Mar 31), year rollover, time of day preserved.
+
+**`money.test.ts`** (6 tests): float pitfalls, rounding, NaN/∞ rejected, bps conversion, `isValidCents` limits, AUD formatting.
+
+### Why
+- **Pure functions are the easiest and most valuable things to unit test:** no DB, no mocks, milliseconds to run. This is the money maths, so it's the code where a bug costs the most.
+- **Example tests + property tests:**
+  - Examples pin exact known values (the spec's $888.49).
+  - Properties check rules that must *always* hold, across inputs nobody thought to write by hand.
+- **Seeded randomness:** `Math.random()` would give different loans on every run, so a failure might never reproduce. A seeded generator gives the same 1,000 loans every time.
+- **Context in property assertions** (`{ principalCents, annualRateBps, termMonths, … }`): when one fails, the message shows exactly which loan broke it.
+- **`it.each`:** one readable table for many similar cases instead of copy-pasted tests.
+- **Mutation check (testing the tests):** I temporarily disabled the "last installment absorbs the remainder" rule. **5 tests failed**, proving they actually guard that rule. Then I restored the code and all 26 passed. A test that can't fail is worthless.
+
+### How to test
+```powershell
+cd api
+npx jest tests/unit            # → 26 passed (no database needed)
+npx jest tests/unit --verbose  # list every test name
+```
+
+### Interview points
+- *"How did you test the repayment calculation?"* — Unit tests for the spec example and edge cases (0%, rounding remainder, month-end dates), plus a seeded property test over 1,000 random loans asserting invariants like "final balance is exactly 0".
+- *"What's property-based testing?"* — Instead of specific input/output pairs, generate many inputs and assert properties that must always be true. It finds edge cases you didn't think of. (Libraries like fast-check also *shrink* failures to the smallest example.)
+- *"How do you know your tests are good?"* — Break the code on purpose and check they fail (mutation testing; tools like Stryker automate it).
+
+---
+
+<!-- Next: 7.3 auth integration tests -->
