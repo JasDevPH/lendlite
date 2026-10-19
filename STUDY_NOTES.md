@@ -2953,6 +2953,35 @@ docker compose down              # add -v to wipe DB + uploads
 
 ---
 
+## 11.8 Incident: CI caught a race in idempotent submit
+
+### What happened
+- The README push (`b0f5e7d`) touched `web/`, so it was the first real run of the CI → deploy gate.
+- CI went **red**: *"two simultaneous submits with the same key"* returned `[409, 200]` instead of `[200, 200]`. It had passed locally and on the first CI run, so it was **timing-dependent**.
+- Railway's **Wait for CI skipped the deploy**, so production was never affected.
+
+### Root cause
+1. Request B reads the application while it's still a DRAFT, with no key yet.
+2. Request A commits the submit and stores the key on **this** application.
+3. B's check *"is this key already used?"* finds the key and wrongly assumes it belongs to a *different* application → 409.
+
+The check never compared **which** application owned the key.
+
+### Fix (PR #1)
+- If the key's owner is this same application, it's a simultaneous retry: **replay** the original result. Only a key owned by another application gets a 409.
+- **The regression test is deterministic:** a one-off `jest.spyOn(prisma.loanApplication, 'findFirst')` returns the stale DRAFT snapshot, forcing the exact interleaving every time instead of relying on luck.
+- **Test first, then fix:**
+  1. The test-only commit made CI red (409, the bug reproduced).
+  2. The fix commit made it green (90/90).
+  3. Merge → main CI green → Railway deployed → API healthy.
+
+### Interview points
+- *"Tell me about a bug you fixed."* — This one. It's a concurrency bug in idempotency handling: found by CI, kept out of production by the deploy gate, root-caused by tracing the interleaving, reproduced deterministically, and fixed test-first in a PR.
+- *"How do you test race conditions?"* — Concurrent tests can find them but are flaky by nature. Once you understand the interleaving, write a deterministic test that forces it (a stubbed stale read, a controlled pause), so the fix is proven every run.
+- *"Why did CI matter here?"* — The bug only showed up on some runs. Running the suite on every push, and gating deploys on it, is what turned an intermittent failure into a caught bug instead of a production incident.
+
+---
+
 # ✅ Phase 11 complete — project done
 
 DevOps & polish:

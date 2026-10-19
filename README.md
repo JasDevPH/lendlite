@@ -42,7 +42,7 @@ A full-stack TypeScript portfolio project, built to the standards of a real fint
 | Files | Multer → Cloudinary (private) in production, local disk in dev |
 | Security | helmet, CORS allow-list, express-rate-limit |
 | Logging | pino (JSON in production, pretty in dev) |
-| Testing | Jest + Supertest against a real Postgres (89 tests) |
+| Testing | Jest + Supertest against a real Postgres (90 tests) |
 | DevOps | Docker (multi-stage), Docker Compose, GitHub Actions, Railway |
 
 ---
@@ -201,7 +201,7 @@ Base URL `/api/v1`. Success responses are `{ "data": … }`. Errors are `{ "erro
 
 Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml):
 
-1. **API:** typecheck → 89 tests against a Postgres service container → build → `npm audit` (production deps).
+1. **API:** typecheck → 90 tests against a Postgres service container → build → `npm audit` (production deps).
 2. **Web:** lint → typecheck → `next build` → `npm audit`.
 3. **Compose smoke test:** `docker compose up --build` on a clean runner, then checks that the seed ran, the DB is reachable, the demo users can log in, an upload survives an API restart, and the web app renders.
 
