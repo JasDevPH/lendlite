@@ -653,4 +653,49 @@ Verified:
 
 ---
 
-<!-- Next: 3.4 middleware/auth.ts -->
+## 3.4 `middleware/auth.ts` (`requireAuth`) + `GET /auth/me`
+
+### What it does
+`requireAuth` runs before protected controllers:
+1. Reads `Authorization: Bearer <token>` (the scheme is case-insensitive). If it's missing or malformed → **401** `UNAUTHORIZED`.
+2. `verifyToken()` (from the auth service) checks the signature, expiry, algorithm and payload shape. If anything is wrong → **401** `Invalid or expired token`.
+3. Sets **`req.user = { id, role }`** and calls `next()`.
+
+`GET /api/v1/auth/me` is now live: `requireAuth → authController.me`. It returns the current user, or 401 if the account no longer exists.
+
+### Why
+- **Middleware = write the check once, reuse it everywhere.** Any route becomes protected by adding `requireAuth` to its chain.
+- **401 vs 403:**
+  - **401 Unauthorized** really means *unauthenticated*: "we don't know who you are", so log in again.
+  - **403 Forbidden** means "we know who you are, but you're not allowed". That's `requireRole`, next component.
+- **Bearer token in a header (not a cookie):** simple for SPAs and mobile, and not sent automatically by browsers, so there's no CSRF risk. The trade-off is that the frontend must store it (localStorage → XSS risk; see the Phase 8 notes).
+- **Role from the token, not the DB:** stateless, no DB query on every request. Trade-off: if an admin demotes someone, the old role works until the token expires (≤1h). `/auth/me` does hit the DB, so it reflects the current profile.
+- **"User no longer exists" check in `getCurrentUser`:** a validly signed token for a deleted user is still refused.
+- **Uniform 401 messages:** we don't say *which* check failed (expired vs bad signature), which gives attackers no feedback.
+
+### How to test
+```powershell
+# get a token
+$t = (Invoke-RestMethod -Method Post http://localhost:4001/api/v1/auth/login -ContentType 'application/json' `
+      -Body '{"email":"customer@lendlite.dev","password":"Customer1234"}').data.token
+curl.exe -H "Authorization: Bearer $t" http://localhost:4001/api/v1/auth/me    # 200 user
+curl.exe http://localhost:4001/api/v1/auth/me                                  # 401
+```
+Verified:
+
+| Authorization header | Result |
+|---|---|
+| none / `Basic abc123` / `Bearer ` | 401 Missing or malformed Authorization header |
+| `Bearer not.a.jwt` / expired token | 401 Invalid or expired token |
+| validly signed, user doesn't exist | 401 User no longer exists |
+| valid token (`Bearer` or `bearer`) | **200** current user |
+
+### Interview points
+- *"Difference between 401 and 403?"* — 401: not authenticated (no or invalid credentials). 403: authenticated but not permitted.
+- *"Authentication vs authorisation?"* — Authentication = *who are you?* (`requireAuth`, JWT). Authorisation = *what may you do?* (`requireRole`, ownership checks in services).
+- *"Stateless JWT vs server sessions?"* — JWT: no session store, scales horizontally, but is hard to revoke and the role can be stale. Sessions: easy revocation and fresh data, but need shared storage (e.g. Redis).
+- *"Where should the token be stored on the client?"* — Memory + httpOnly cookie is safest against XSS. localStorage is simpler but readable by any injected script. (We use localStorage for simplicity; documented as a trade-off.)
+
+---
+
+<!-- Next: 3.5 middleware/requireRole.ts -->

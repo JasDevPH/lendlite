@@ -16,7 +16,7 @@ export const login = asyncHandler(async (req, res) => {
   res.json({ data: result });
 });
 
-// Needs the auth middleware (next component) to have set req.user
+// Route is behind requireAuth, which guarantees req.user is set
 export const me = asyncHandler(async (req, res) => {
   const user = await authService.getCurrentUser(req.user!.id);
   res.json({ data: user });
