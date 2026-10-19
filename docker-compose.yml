@@ -1,0 +1,34 @@
+# Local development stack.
+# Phase 1: Postgres only — the offline alternative to Neon.
+#   docker compose up -d db
+# Then point api/.env at it:
+#   DATABASE_URL=postgresql://lendlite:lendlite@localhost:5433/lendlite
+# (api + web services are added in Phase 11)
+
+services:
+  db:
+    # Pinned major version to match the spec (and the Neon project)
+    image: postgres:16-alpine
+    container_name: lendlite-db
+    restart: unless-stopped
+    environment:
+      # Dev-only credentials — fine to commit because this DB only listens locally
+      POSTGRES_USER: lendlite
+      POSTGRES_PASSWORD: lendlite
+      POSTGRES_DB: lendlite
+    ports:
+      # Host 5433 → container 5432. 5433 avoids clashing with another Postgres
+      # already on 5432. Bound to localhost only, so it isn't reachable from your network.
+      - '127.0.0.1:5433:5432'
+    volumes:
+      # Named volume: data survives `docker compose down` (use `down -v` to wipe it)
+      - db-data:/var/lib/postgresql/data
+    # Lets other services (and `docker compose ps`) know when Postgres is actually ready
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lendlite -d lendlite']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

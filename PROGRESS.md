@@ -12,9 +12,13 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 4 | `utils/AppError.ts` + `middleware/errorHandler.ts` | Done | `AppError(statusCode, code, message, details?)`; handler maps AppError / ZodError (400) / bad JSON (400) / oversized body (413) / unknown route (404) / bugs (500, logged, no leak). |
 | 4b | Dev scripts: `secret:jwt`, `db:neon` | Done | Random 512-bit JWT secret → `.env`. Neon project `lendlite` (id `odd-dream-83370129`, Sydney, PG 16) created; `DATABASE_URL` → `.env`. Idempotent. `api/scripts/` is gitignored (local only); checked via `npm run typecheck:scripts`. |
 | 5 | `app.ts` + `server.ts` with `/health` | Todo | |
-| 6 | `docker-compose.yml` (Postgres only) | Todo | |
+| 6 | `docker-compose.yml` (Postgres only) | Done | Offline alternative to Neon. `postgres:16-alpine`, host port **5433** (5432 taken by another local stack), localhost-only bind, named volume, `pg_isready` healthcheck. Verified healthy + data persists across restart. |
 
 **Done when:** `docker compose up -d db` + `npm run dev` → `GET /api/v1/health` returns 200.
+
+**Database options** (set `DATABASE_URL` in `api/.env`):
+- Neon (cloud, default now): written by `npm run db:neon`
+- Docker (offline): `postgresql://lendlite:lendlite@localhost:5433/lendlite`
 
 ### Decisions
 - **TypeScript pinned to 5.x** — npm defaulted to TS 7 (Go port); ts-jest and most tooling still target TS 5.

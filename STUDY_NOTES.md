@@ -198,4 +198,48 @@ npx tsx -e "import { env } from './src/config/env'; console.log(new URL(env.DATA
 
 ---
 
+## 1.6 `docker-compose.yml` — local Postgres (offline alternative to Neon)
+
+*(Built before 1.5 on purpose, so you have both database options before the server's `/health` check uses one.)*
+
+### What it does
+Defines one service, `db`, using `postgres:16-alpine`:
+- **Credentials:** user, password and database all `lendlite`.
+- **Port:** host **5433** → container 5432, bound to `127.0.0.1` only.
+- **Volume:** a named volume `db-data` keeps data across restarts.
+- **Healthcheck:** `pg_isready` reports when Postgres is actually ready to accept connections.
+
+**Switching between databases** is one line in `api/.env`:
+```
+# Neon (cloud)   → whatever `npm run db:neon` wrote
+# Docker (local) → DATABASE_URL=postgresql://lendlite:lendlite@localhost:5433/lendlite
+```
+
+### Why
+- **Offline/zero-cost option:** it works without internet and gives you a disposable DB to wipe freely (`down -v`).
+- **`16-alpine`:** pinned major version, matching the spec and the Neon project. Alpine images are small.
+- **Port 5433, not 5432:** another stack on this machine (`jasdev-postgres-1`) already uses 5432. Inside Docker it's still 5432; only the host side changes. Format: `HOST:CONTAINER`.
+- **`127.0.0.1:` bind:** without it, Docker publishes on all interfaces (`0.0.0.0`), so anyone on your Wi-Fi could reach a DB whose password is `lendlite`. Docker port publishing also bypasses Windows/Linux firewall rules.
+- **Committed dev credentials are fine:** this DB only listens locally and holds no real data. Real secrets never go in compose files.
+- **Named volume:** containers are disposable; volumes hold the state. `docker compose down` keeps data, `down -v` deletes it.
+- **Healthcheck:** "container started" ≠ "Postgres ready". In Phase 11 the api service will `depends_on: { db: { condition: service_healthy } }`, so it doesn't crash-loop on boot.
+
+### How to test
+```powershell
+docker compose up -d db
+docker compose ps                    # lendlite-db  127.0.0.1:5433->5432/tcp  Up (healthy)
+docker exec lendlite-db psql -U lendlite -d lendlite -c "select version();"   # PostgreSQL 16.x
+docker compose down                  # stop (data kept)
+docker compose down -v               # stop AND wipe data
+```
+Verified: healthy, reachable on 127.0.0.1:5433, and a test row survived `down` → `up`.
+
+### Interview points
+- *"Image vs container vs volume?"* — An image is the blueprint, a container is a running instance of it (disposable), and a volume is persistent storage that outlives containers.
+- *"What does `ports: '127.0.0.1:5433:5432'` mean?"* — Host loopback port 5433 forwards to port 5432 inside the container. Binding to loopback keeps it private to your machine.
+- *"Why a healthcheck?"* — So orchestration knows when a service is *ready*, not just *started*. Dependents wait for healthy.
+- *"Why both Neon and Docker?"* — Docker gives a reproducible, offline local environment (and CI can use the same Postgres image). Neon is a managed cloud DB closer to production. The app doesn't care: it only reads `DATABASE_URL`, a [12-factor](https://12factor.net/config) config principle.
+
+---
+
 <!-- Next: 1.5 app.ts + server.ts with /health -->
