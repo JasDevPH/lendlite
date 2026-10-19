@@ -492,4 +492,49 @@ Prisma schema (5 models, 3 enums, indexes), initial migration applied to both Ne
 
 ---
 
-<!-- Next: Phase 3.1 auth.schema.ts -->
+# Phase 3 — Authentication
+
+## 3.1 `modules/auth/auth.schema.ts`
+
+### What it does
+Zod schemas describing what a valid request body looks like:
+- **`registerSchema`**:
+  - `email`: trimmed, lowercased, valid format, ≤254 chars.
+  - `password`: 8–72 chars, ≥1 letter, ≥1 number.
+  - `fullName`: trimmed, 2–100 chars.
+- **`loginSchema`**: `email` (same normalisation); `password` only needs to be present (1–72 chars).
+- **`RegisterInput` / `LoginInput`** types are *inferred* from the schemas with `z.infer`.
+
+These will be used by a `validate` middleware (next components) before the controller ever runs.
+
+### Why
+- **Validate at the boundary:** never trust client input. Bad data is rejected with a 400 before it touches business logic or the DB.
+- **Normalise emails (trim + lowercase):** otherwise `Jo@Example.com` and `jo@example.com` could register as two accounts, and login would fail on a stray space.
+- **Max 72 chars:** bcrypt only uses the first 72 bytes. A 100-char password would silently be the same as its first 72 chars. Better to reject it honestly.
+- **Strength rules only on register, not login:** login just checks the hash. Applying rules there would also lock out older accounts if rules change, and leak hints about valid passwords.
+- **Unknown keys are stripped** (Zod's default): sending `role: "ADMIN"` in register is silently dropped. That's protection against **mass assignment**, i.e. users setting fields they shouldn't, like their own role.
+- **`z.infer` = one source of truth:** the validation rules and the TypeScript types can never drift apart.
+- **Collects all errors at once:** a missing name *and* a bad email are both reported, so the form can highlight every field.
+
+### How to test
+Verified with a throwaway script:
+```
+valid "  Jo@Example.COM "   → {"email":"jo@example.com", ...}   (trimmed + lowercased)
+"abc1"                      → Password must be at least 8 characters
+"password"                  → must contain at least one number
+"12345678"                  → must contain at least one letter
+73-char password            → must be at most 72 characters
+bad email + no name         → email: Invalid email address | fullName: Required
+extra role:"ADMIN"          → stripped from output
+login with weak password    → accepted (strength rules don't apply to login)
+```
+
+### Interview points
+- *"Where do you validate input?"* — At the API boundary with Zod, on every body/query/params, before the controller runs. The DB constraints are a second safety net.
+- *"What is mass assignment?"* — When an API copies the request body straight into the DB, letting attackers set fields like `role` or `status`. We prevent it by whitelisting fields in schemas (unknown keys are stripped).
+- *"Why limit password length?"* — bcrypt's 72-byte limit. Also, unbounded inputs into a slow hash could be a DoS vector.
+- *"Why lowercase emails?"* — Prevents duplicate accounts and login failures. (Technically the local part *can* be case-sensitive, but virtually no provider treats it that way.)
+
+---
+
+<!-- Next: 3.2 auth.service.ts -->
