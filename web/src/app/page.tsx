@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
+import { LoanCalculator } from '@/components/calculator/LoanCalculator';
 
-// Phase 8.1 placeholder landing page: proves the design tokens, fonts and
-// layout. The live loan calculator replaces the example card in Phase 9.
+// Public landing page: hero + live repayment calculator + how it works.
+// A server component; only the calculator is a client component.
 
 const facts = [
   { label: 'Borrow', value: '$2,000 – $50,000' },
@@ -84,34 +85,8 @@ export default function Home() {
               </dl>
             </div>
 
-            {/* Example quote card (static for now; becomes the live calculator in Phase 9) */}
-            <div className="rounded-card bg-surface p-6 text-ink shadow-raised sm:p-8">
-              <p className="text-sm font-medium text-muted">Example repayment</p>
-              <p className="money mt-2 text-4xl font-semibold tracking-tight">
-                $888.49<span className="text-base font-medium text-muted"> / month</span>
-              </p>
-              <div className="mt-6 grid grid-cols-3 gap-4 rounded-xl bg-canvas p-4 text-sm">
-                <div>
-                  <p className="text-muted">Loan amount</p>
-                  <p className="money mt-1 font-semibold">$10,000</p>
-                </div>
-                <div>
-                  <p className="text-muted">Term</p>
-                  <p className="money mt-1 font-semibold">12 months</p>
-                </div>
-                <div>
-                  <p className="text-muted">Rate</p>
-                  <p className="money mt-1 font-semibold">12.00% p.a.</p>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between border-t border-line pt-4 text-sm">
-                <span className="text-muted">Total interest</span>
-                <span className="money font-semibold text-emerald-600">$661.86</span>
-              </div>
-              <p className="mt-6 text-xs leading-relaxed text-subtle">
-                Illustrative only. Your rate is set when your application is approved.
-              </p>
-            </div>
+            {/* Live calculator (client component; quotes come from POST /calculator/quote) */}
+            <LoanCalculator />
           </div>
         </div>
       </section>

@@ -69,6 +69,42 @@
   }
 }
 
+/* Range slider: brand-filled track up to the thumb (--fill set inline) */
+.range-slider {
+  appearance: none;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-brand-600) 0%,
+    var(--color-brand-600) var(--fill, 0%),
+    var(--color-line) var(--fill, 0%),
+    var(--color-line) 100%
+  );
+  cursor: pointer;
+}
+.range-slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 1.375rem;
+  width: 1.375rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-brand-600);
+  box-shadow: 0 2px 6px rgb(16 24 40 / 0.2);
+  transition: transform 0.15s;
+}
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+.range-slider::-moz-range-thumb {
+  height: 1.375rem;
+  width: 1.375rem;
+  border-radius: 9999px;
+  background: #fff;
+  border: 2px solid var(--color-brand-600);
+  box-shadow: 0 2px 6px rgb(16 24 40 / 0.2);
+}
+
 /* Money should always line up in tables and cards: equal-width digits */
 @utility money {
   font-variant-numeric: tabular-nums;

@@ -61,6 +61,11 @@ export interface GetOptions {
   skipUnauthorizedHandler?: boolean;
 }
 
+export interface PostOptions {
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, signal, skipUnauthorizedHandler = false } = options;
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
@@ -104,8 +109,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
 export const api = {
   get: <T>(path: string, options: GetOptions = {}) => request<T>(path, options),
-  post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
-    request<T>(path, { method: 'POST', body, headers }),
+  post: <T>(path: string, body?: unknown, options: PostOptions = {}) =>
+    request<T>(path, { method: 'POST', body, ...options }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),
   // Multipart upload (FormData with a `file` field)
   upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),

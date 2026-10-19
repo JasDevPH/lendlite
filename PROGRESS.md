@@ -120,6 +120,18 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** can register/login from the UI and see an empty dashboard.
 
+## Phase 9 — Customer UI (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Calculator widget | Done | `LoanCalculator` on landing page: amount/term/example-rate sliders (`RangeField`, accessible), live quote from `POST /calculator/quote`, 250 ms debounce + `AbortController`, pre-filled default quote in static HTML, error state, CTA → `/register` or pre-filled `/applications/new`. Browser e2e 14/14. |
+| 2 | Dashboard list | Todo | |
+| 3 | Multi-step application form | Todo | |
+| 4 | Document upload | Todo | |
+| 5 | Application detail (status timeline + schedule) | Todo | |
+
+**Done when:** a customer can complete the whole application flow in the browser.
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema

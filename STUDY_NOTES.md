@@ -2150,4 +2150,48 @@ Next.js 16 frontend foundation: fintech design tokens, typed API client with a s
 
 ---
 
-<!-- Next: Phase 9.1 calculator widget -->
+# Phase 9 — Customer UI
+
+## 9.1 Loan calculator widget (landing page)
+
+### What it does
+- **`components/calculator/LoanCalculator.tsx`** (client component), placed in the landing-page hero in place of the static example card:
+  - **Three sliders:** amount $2,000–$50,000 ($500 steps), term 6–60 months, example rate 5–25% (0.25% steps).
+  - **Result panel:** estimated monthly repayment, total interest, total repayable, all from **`POST /calculator/quote`**.
+  - **Debounced (250 ms) requests + `AbortController`:** stale requests are cancelled.
+  - While a new quote loads, the old numbers fade (`aria-busy`). On failure, a friendly `role="alert"` message, and the inputs keep working.
+  - **CTA "Apply for $X":** logged-out → `/register`; logged-in customer → `/applications/new?amount=…&term=…` (pre-fills the form in 9.3).
+  - Default inputs = the spec example, with its quote **pre-filled**, so the prerendered HTML already shows real numbers.
+- **`components/ui/RangeField.tsx`:** accessible labelled slider (native `<input type="range">`, `<output>`, `aria-valuetext` "$10,000", min/max labels) + `.range-slider` CSS with a brand-filled track (`--fill`).
+- **`lib/loanRules.ts`:** front-end copy of the limits.
+- **`api.post(path, body, { headers, signal })`:** now supports abort signals.
+
+### Why
+- **Quotes come from the API, not duplicated maths:** the same `generateSchedule` that approvals use, so a quote can never disagree with a real approval (single source of truth, as in 4.3).
+- **Debounce:** dragging a slider fires dozens of change events. Without debouncing, that's dozens of API calls per second. Verified: 12 rapid key presses → **1 request**.
+- **AbortController fixes a race condition:** if request A (slow) and then B (fast) are in flight, A's late response could overwrite B's. Aborting the previous request on every change guarantees the latest input wins.
+- **Pre-filled default quote:** the server-rendered HTML shows `$888.49` immediately (fast first paint, works before JS loads, and for crawlers). The API then confirms it.
+- **"Example interest rate":** the real rate is decided at approval. Labelling it as an example and adding a disclaimer keeps the UI honest, which is important in lending (I also removed a "No credit check" badge that would have been a misleading claim).
+- **Native range input:** keyboard support (arrows, Home/End, PageUp/Down) and screen-reader semantics for free. `aria-valuetext` makes it announce "$10,000" instead of "1000000". `aria-live` on the result announces new repayments.
+- **Only the calculator is a client component:** the rest of the landing page stays a server component (less JS shipped).
+
+### How to test
+Real browser (Edge + playwright-core), **14/14**:
+- **Display:** default `$888.49` is in the static HTML; it shows `$888.49` / `$661.86` after the API confirms; sliders announce formatted values.
+- **Accuracy:** End key → $50,000, and the repayment **equals a direct API quote**; the CTA follows the amount. Term 24 months and rate 5% also match the API exactly.
+- **Debounce:** 12 rapid changes → 1 request.
+- **CTA:** logged-out → `/register`; logged-in customer → `/applications/new?amount=1000000&term=12`.
+- **Failure:** simulated outage (aborted requests) → friendly error; recovers when the API is back.
+- **Layout:** no mobile overflow at 390 px; no JS errors.
+
+*Test gotcha:* one check failed with "$4,442.44 vs $4,442.44". During the debounce window the request hasn't started, so `aria-busy` is already false and the test read the **old** value. Fixed by computing the expected value first and waiting until the UI shows it. A timing bug in the test, not the app.
+
+### Interview points
+- *"How do you avoid hammering the API from a slider?"* — Debounce the input (send after the user pauses) and cancel in-flight requests with `AbortController`.
+- *"What race condition can happen with search-as-you-type / live calculators, and how did you fix it?"* — Out-of-order responses: an older, slower response overwrites a newer one. Aborting the previous request (or tracking a request ID) ensures only the latest result is applied.
+- *"Why call the API instead of calculating in the browser?"* — One source of truth for money maths. The quote uses exactly the code that generates real repayment schedules.
+- *"How did you make the sliders accessible?"* — Native range inputs with labels, `aria-valuetext` for human-readable values, and an `aria-live` region for results.
+
+---
+
+<!-- Next: 9.2 dashboard list -->
