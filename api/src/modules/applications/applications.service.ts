@@ -135,12 +135,14 @@ export async function submitApplication(
     if (app.idempotencyKey === idempotencyKey) {
       return { application: app, replayed: true };
     }
-    // Same key on a DIFFERENT application → client bug; refuse (spec: 409)
-    const keyOwner = await prisma.loanApplication.findUnique({
-      where: { idempotencyKey },
-      select: { id: true },
-    });
-    if (keyOwner) throw idempotencyKeyReused();
+    const keyOwner = await prisma.loanApplication.findUnique({ where: { idempotencyKey } });
+    if (keyOwner) {
+      // Owned by THIS application: a simultaneous request with the same key
+      // submitted it after our read above (our `app` is stale). Replay it.
+      if (keyOwner.id === id) return { application: keyOwner, replayed: true };
+      // Same key on a DIFFERENT application → client bug; refuse (spec: 409)
+      throw idempotencyKeyReused();
+    }
   }
 
   // Only a DRAFT can be submitted (e.g. a second submit WITHOUT a key → 409)
