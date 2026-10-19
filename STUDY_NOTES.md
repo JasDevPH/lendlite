@@ -1059,4 +1059,70 @@ Verified end-to-end over HTTP (logged in as customer, a 2nd customer, and admin)
 
 ---
 
-<!-- Next: 4.7 submit with idempotency -->
+## 4.7 Submit with idempotency — `POST /applications/:id/submit`
+
+### What it does
+- **`applications.status.ts`**: the status machine **as data**:
+  ```
+  DRAFT → [SUBMITTED]   SUBMITTED → [UNDER_REVIEW]   UNDER_REVIEW → [APPROVED, REJECTED]
+  APPROVED → []         REJECTED → []   (final)
+  ```
+  `assertTransition(from, to)` throws **409 `INVALID_STATUS_TRANSITION`**. It's reused by the admin actions in Phase 6.
+- **`submitApplication(id, user, key?)`**, in order:
+  1. Owner check → 404.
+  2. **If a key is given:**
+     - Same key already on *this* app → **replay**: return the stored application, process nothing.
+     - Key on a *different* app → **409 `IDEMPOTENCY_KEY_REUSED`**.
+  3. `assertTransition(status, SUBMITTED)` → 409 if not a DRAFT.
+  4. Completeness check → **400 `APPLICATION_INCOMPLETE`** with `details.missingFields`. (`employerName` isn't required when UNEMPLOYED; income/expenses of **0 are valid**, so it checks `== null`, not falsiness.)
+  5. **Transaction:** conditional update `WHERE status = DRAFT` → SUBMITTED, `submittedAt`, store the key; plus a `SUBMITTED` audit row.
+  6. **Race handling:**
+     - **P2025** (no longer a draft): if the winner used the *same key*, replay. Otherwise 409.
+     - **P2002** (key grabbed concurrently by another app): 409.
+- **Controller:** validates the optional `Idempotency-Key` header (8–255 chars, 400 if malformed) and sets **`Idempotent-Replayed: true`** on replays. Returns 200 + the application either way.
+- **CORS `exposedHeaders`:** `Idempotent-Replayed` and `Retry-After`, so browser JS can read them.
+- *Phase 5 will add:* "at least one ID and one PAYSLIP document" to the completeness check.
+
+### Why
+- **The problem idempotency solves:** the customer clicks Submit, the network drops before the response arrives, and the app retries. Without protection, the retry would fail with a confusing 409 or (in other systems, e.g. payments) **process twice**. With a key, the server recognises the retry and returns the original result.
+- **How the client should use it:** generate one random key (UUID) per *intent* ("submit this application"), and reuse it for every retry of that intent.
+- **Key stored on the application row with a UNIQUE index:** the DB guarantees one key ↔ one application, even under concurrency.
+- **Same key on another application → 409:** that's a client bug (reusing keys across different operations), so refuse loudly rather than guess.
+- **Status machine as a lookup table:** all allowed transitions are visible in 5 lines, there's one function to check them, and it's easy to test and to extend (e.g. adding WITHDRAWN).
+- **Conditional update `WHERE status = DRAFT`:** two simultaneous submits can both pass the "is it a draft?" check. Only one UPDATE can match, and the loser gets P2025. If it carried the same key it's a duplicate of the same intent, so we replay instead of erroring.
+- **400 for incomplete vs 409 for wrong state:** incomplete data is fixable *by the client's input*; wrong state is a *conflict with the resource*.
+- **200, not 201:** submit changes an existing resource; nothing new is created.
+
+### How to test
+Verified over HTTP (test data deleted afterwards):
+```
+201  create draft
+400  submit incomplete            APPLICATION_INCOMPLETE {"missingFields":["employmentType","employerName",...]}
+200  edit: fill employment (expenses = 0)
+200  submit with key A            status=SUBMITTED submittedAt=…5.544Z
+200  RETRY with key A             same submittedAt, identical body   [Idempotent-Replayed]
+409  edit after submit            APPLICATION_NOT_EDITABLE
+409  submit again without key     INVALID_STATUS_TRANSITION
+409  submit again with NEW key    INVALID_STATUS_TRANSITION
+     audit trail: CREATED → SUBMITTED (exactly one SUBMITTED)
+409  key A on a different app     IDEMPOTENCY_KEY_REUSED
+400  key "abc"                    path "idempotency-key": at least 8 characters
+RACE: 2 simultaneous submits, same key → both 200 (2nd [Idempotent-Replayed]), 1 audit row
+```
+
+### Interview points
+- *"What is idempotency and why does a lending API need it?"* — Doing an operation once or many times has the same effect. Networks fail and clients retry; idempotency keys make retries safe (no duplicate submissions, payments or loans).
+- *"How did you implement it?"* — Client sends `Idempotency-Key`. The server stores it on the application (unique index) in the same transaction as the status change. A repeat with the same key returns the stored result; reuse on a different resource → 409.
+- *"What about two identical requests at the exact same time?"* — The conditional update lets only one win. The loser sees the key already stored and replays. I tested this with `Promise.all`: both 200, exactly one audit row.
+- *"Why is the status machine in the service layer?"* — It's a business rule: it must hold for every caller (HTTP, admin tools, jobs), and it belongs next to the transaction that changes the status.
+- *"How would this differ for payments?"* — Same idea, but you'd usually store keys in their own table (key, request hash, response, expiry), so any endpoint can be idempotent and you can detect "same key, different body".
+
+---
+
+# ✅ Phase 4 complete
+
+Money helpers (cents/bps), pure amortization (spec example ✓, 2,000-loan property check), public calculator quote, application schemas with shared loan rules, service with ownership (404) and draft rules (409), REST endpoints, status machine, transactional audit log, and idempotent, race-safe submit.
+
+---
+
+<!-- Next: Phase 5.1 multer config -->

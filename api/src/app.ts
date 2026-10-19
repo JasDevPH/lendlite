@@ -18,7 +18,8 @@ export const app = express();
 // Security headers (no X-Powered-By, nosniff, frame protection, etc.)
 app.use(helmet());
 // Only our web frontend may call the API from a browser
-app.use(cors({ origin: env.WEB_ORIGIN }));
+// (exposedHeaders: browsers hide non-standard response headers from JS unless listed)
+app.use(cors({ origin: env.WEB_ORIGIN, exposedHeaders: ['Idempotent-Replayed', 'Retry-After'] }));
 // Small body limit: our JSON payloads are tiny; big bodies are likely abuse (→ 413)
 app.use(express.json({ limit: '100kb' }));
 // One log line per request: method, URL, status, response time

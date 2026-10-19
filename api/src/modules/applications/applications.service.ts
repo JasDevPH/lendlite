@@ -1,9 +1,10 @@
-import { ApplicationStatus, Prisma, Role } from '@prisma/client';
+import { ApplicationStatus, EmploymentType, Prisma, Role, type LoanApplication } from '@prisma/client';
 import { recordAudit } from '../../lib/audit';
 import { prisma } from '../../lib/prisma';
 import type { AuthUser } from '../../types/auth';
 import { AppError } from '../../utils/AppError';
 import type { CreateApplicationInput, UpdateApplicationInput } from './applications.schema';
+import { assertTransition } from './applications.status';
 
 // ---------- Helpers ----------
 
@@ -19,6 +20,24 @@ function notEditable(status: ApplicationStatus): AppError {
     'APPLICATION_NOT_EDITABLE',
     `Only DRAFT applications can be edited (current status: ${status})`,
   );
+}
+
+function idempotencyKeyReused(): AppError {
+  return new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'This Idempotency-Key was already used for a different application');
+}
+
+// Spec: submit requires all fields filled. Returns the names of missing fields.
+// (Document requirements — ID + PAYSLIP — are added in Phase 5.)
+function findMissingFields(app: LoanApplication): string[] {
+  const missing: string[] = [];
+  if (!app.purpose) missing.push('purpose');
+  if (!app.employmentType) missing.push('employmentType');
+  // An employer name only makes sense if they're employed by someone
+  if (app.employmentType !== EmploymentType.UNEMPLOYED && !app.employerName) missing.push('employerName');
+  // `== null`, not falsy: an income or expenses of 0 is a valid answer
+  if (app.annualIncomeCents == null) missing.push('annualIncomeCents');
+  if (app.monthlyExpensesCents == null) missing.push('monthlyExpensesCents');
+  return missing;
 }
 
 // Ownership is part of the WHERE clause: customers only ever see their own rows.
@@ -86,6 +105,80 @@ export async function updateDraft(id: string, user: AuthUser, input: UpdateAppli
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
       const current = await prisma.loanApplication.findUnique({ where: { id }, select: { status: true } });
       throw current ? notEditable(current.status) : notFound();
+    }
+    throw err;
+  }
+}
+
+export interface SubmitResult {
+  application: LoanApplication;
+  // true = this was a retry with the same key; nothing was re-processed
+  replayed: boolean;
+}
+
+// DRAFT → SUBMITTED, owner only. With an Idempotency-Key, retries of the same
+// submit return the original result instead of failing or double-processing.
+export async function submitApplication(
+  id: string,
+  user: AuthUser,
+  idempotencyKey?: string,
+): Promise<SubmitResult> {
+  const app = await prisma.loanApplication.findFirst({ where: { id, userId: user.id } });
+  if (!app) throw notFound();
+
+  if (idempotencyKey) {
+    // Same key, same application → it's a retry: replay the original success
+    if (app.idempotencyKey === idempotencyKey) {
+      return { application: app, replayed: true };
+    }
+    // Same key on a DIFFERENT application → client bug; refuse (spec: 409)
+    const keyOwner = await prisma.loanApplication.findUnique({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    if (keyOwner) throw idempotencyKeyReused();
+  }
+
+  // Only a DRAFT can be submitted (e.g. a second submit WITHOUT a key → 409)
+  assertTransition(app.status, ApplicationStatus.SUBMITTED);
+
+  const missing = findMissingFields(app);
+  if (missing.length > 0) {
+    throw new AppError(400, 'APPLICATION_INCOMPLETE', 'Please complete all required fields before submitting', {
+      missingFields: missing,
+    });
+  }
+
+  try {
+    const submitted = await prisma.$transaction(async (tx) => {
+      // Conditional update: only succeeds if it's STILL a draft (race-safe)
+      const updated = await tx.loanApplication.update({
+        where: { id, status: ApplicationStatus.DRAFT },
+        data: { status: ApplicationStatus.SUBMITTED, submittedAt: new Date(), idempotencyKey },
+      });
+      await recordAudit(tx, {
+        applicationId: id,
+        actorId: user.id,
+        action: 'SUBMITTED',
+        fromStatus: ApplicationStatus.DRAFT,
+        toStatus: ApplicationStatus.SUBMITTED,
+      });
+      return updated;
+    });
+    return { application: submitted, replayed: false };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2002: unique idempotencyKey — another application grabbed this key concurrently
+      if (err.code === 'P2002') throw idempotencyKeyReused();
+      // P2025: no longer a DRAFT — a concurrent submit won. If it used the same
+      // key, this is a simultaneous retry: replay it. Otherwise it's a conflict.
+      if (err.code === 'P2025') {
+        const current = await prisma.loanApplication.findUniqueOrThrow({ where: { id } });
+        if (idempotencyKey && current.idempotencyKey === idempotencyKey) {
+          return { application: current, replayed: true };
+        }
+        assertTransition(current.status, ApplicationStatus.SUBMITTED);
+      }
     }
     throw err;
   }

@@ -51,5 +51,17 @@ export const applicationIdParamsSchema = z.object({
   id: z.string().uuid('Invalid application id'),
 });
 
+// Optional `Idempotency-Key` header on submit. Clients should send a fresh
+// random value (e.g. a UUID) per submit *intent*, and reuse it on retries.
+// Wrapped in an object so validation errors name the header in `path`
+export const submitHeadersSchema = z.object({
+  'idempotency-key': z
+    .string()
+    .trim()
+    .min(8, 'Idempotency-Key must be at least 8 characters')
+    .max(255, 'Idempotency-Key must be at most 255 characters')
+    .optional(),
+});
+
 export type CreateApplicationInput = z.infer<typeof createApplicationSchema>;
 export type UpdateApplicationInput = z.infer<typeof updateApplicationSchema>;

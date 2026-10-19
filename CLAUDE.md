@@ -364,7 +364,7 @@ Components: Dockerfiles (api, web) → full docker-compose → GitHub Actions CI
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema
 - [x] Phase 3 — Authentication
-- [ ] Phase 4 — Calculator + applications
+- [x] Phase 4 — Calculator + applications
 - [ ] Phase 5 — Documents
 - [ ] Phase 6 — Admin review
 - [ ] Phase 7 — Backend tests

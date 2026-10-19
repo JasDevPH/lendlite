@@ -28,3 +28,5 @@ applicationsRouter.patch(
   validate({ body: updateApplicationSchema }),
   applicationsController.update,
 );
+// Header: Idempotency-Key (optional)
+applicationsRouter.post('/:id/submit', customerOnly, idParams, applicationsController.submit);

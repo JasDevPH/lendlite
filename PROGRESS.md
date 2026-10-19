@@ -52,7 +52,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** register, login, and `/auth/me` work via curl; wrong password → 401; 6th login in a minute → 429.
 
-## Phase 4 — Calculator + loan applications (in progress)
+## Phase 4 — Calculator + loan applications ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -62,7 +62,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 4 | Applications schema | Done | `createApplicationSchema` (amount/term/purpose required, employment optional), `updateApplicationSchema` (all optional, non-empty), `applicationIdParamsSchema` (UUID). Shared `amountCentsField`/`termMonthsField`/`annualRateBpsField` moved to `config/loanRules.ts`; calculator refactored to use them. Protected fields stripped. |
 | 5 | Applications service (create/list/get/update, ownership + status rules) | Done | create (tx + CREATED audit), listMine, get (owner/admin, incl. documents + schedule), updateDraft (owner only, atomic DRAFT-only update, P2025 → 409). Others' apps → 404. Added `types/auth.ts` (`AuthUser`). |
 | 6 | Applications controller/routes | Done | `POST/GET /applications` (customer), `GET /applications/:id` (customer+admin), `PATCH /applications/:id` (customer). `requireAuth` on whole router. Verified 17 HTTP cases: 201/400/401/403/404/409. |
-| 7 | Submit with idempotency | Todo | |
+| 7 | Submit with idempotency | Done | `POST /applications/:id/submit`. Status machine in `applications.status.ts` (`assertTransition` → 409 `INVALID_STATUS_TRANSITION`). Optional `Idempotency-Key` (8–255): same key+app → replay (`Idempotent-Replayed: true`), other app → 409 `IDEMPOTENCY_KEY_REUSED`. Completeness → 400 `APPLICATION_INCOMPLETE`. Transaction + SUBMITTED audit; race-safe (tested 2 concurrent submits → 1 audit row). Document rule added in Phase 5. |
 | 8 | Audit log helper | Done (early, with #5) | `lib/audit.ts` `recordAudit(tx, entry)` — takes a transaction client so audit rows commit atomically with the change. Typed `AuditAction` union. |
 
 **Done when:** a customer can create, edit, and submit a draft; editing after submit → 409; repeated submit with same key returns same result.
@@ -71,7 +71,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema
 - [x] Phase 3 — Authentication
-- [ ] Phase 4 — Calculator + applications
+- [x] Phase 4 — Calculator + applications
 - [ ] Phase 5 — Documents
 - [ ] Phase 6 — Admin review
 - [ ] Phase 7 — Backend tests
