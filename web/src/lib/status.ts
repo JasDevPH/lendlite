@@ -44,5 +44,18 @@ export const STATUS_META: Record<ApplicationStatus, StatusMeta> = {
   },
 };
 
+// Chart fills for the admin pipeline bar (submitted → decided). Validated with
+// the dataviz palette checker against white: all checks pass (worst colour-blind
+// separation ΔE 8.9). Rose-700 rather than rose-500 for "Declined": at the same
+// lightness, red and green next to each other were indistinguishable for
+// deuteranopes (ΔE 5.6). Drafts are left out of the bar (not in the pipeline).
+export const PIPELINE_STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'] as const;
+export const PIPELINE_COLORS: Record<(typeof PIPELINE_STATUSES)[number], string> = {
+  SUBMITTED: '#3e62f4', // brand-500
+  UNDER_REVIEW: '#f59e0b', // amber-500
+  APPROVED: '#10b981', // emerald-500
+  REJECTED: '#be123c', // rose-700
+};
+
 // The order a customer's application moves through (for timelines)
 export const STATUS_FLOW: ApplicationStatus[] = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];

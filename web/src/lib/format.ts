@@ -22,6 +22,12 @@ export function formatCentsWhole(cents: number): string {
   return audWhole.format(cents / 100);
 }
 
+// Headline totals: 12_345_678 cents → "$123.5K"; under $100k shown in full
+const audCompact = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', notation: 'compact', maximumFractionDigits: 1 });
+export function formatCentsCompact(cents: number): string {
+  return cents < 10_000_000 ? formatCentsWhole(cents) : audCompact.format(cents / 100);
+}
+
 // 1250 → "12.50% p.a."
 export function formatRate(bps: number): string {
   return `${(bps / 100).toFixed(2)}% p.a.`;

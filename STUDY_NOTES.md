@@ -2465,4 +2465,48 @@ Customer UI: live calculator, dashboard with status badges and all states, a 4-s
 
 ---
 
-<!-- Next: Phase 10.1 admin stats cards -->
+# Phase 10 — Admin UI
+
+## 10.1 Stats cards (+ pipeline bar)
+
+### What it does
+- **`StatsOverview`** on `/admin`, from `GET /admin/stats` (the raw-SQL endpoint):
+  - **Period filter** (All time / Last 30 days / This year) → `?since=YYYY-MM-DD`, a segmented control with `aria-pressed`, in one row above the figures.
+  - **Four stat tiles:** Awaiting review (SUBMITTED), Under review, Approved (+ **approval rate** = approved ÷ decided), Total approved (compact money, e.g. `$1.2M`, with a note).
+  - Loading skeletons, error + **Try again**, dimmed while a new period loads.
+- **`PipelineBar`:** a part-to-whole **stacked horizontal bar** of Submitted / Under review / Approved / Declined.
+  - **Marks:** 16 px thick, **2 px surface gaps**, rounded only at the outer ends.
+  - **Tooltips:** each segment is focusable with a tooltip on **hover and keyboard focus** ("3 approved · 38%", value first); others dim.
+  - **Legend:** always shows colour dot + label + count + %, which doubles as the table view.
+  - Drafts are reported as text ("1 draft in progress"), not in the bar.
+- **`PIPELINE_COLORS`** in `lib/status.ts`, **`formatCentsCompact`** in `lib/format.ts`.
+
+### Why (data-visualisation rules applied)
+- **Form first, colour last:** headline numbers are **stat tiles**, not charts; the status mix is part-to-whole, so a **stacked bar**.
+- **Palette validated with a script, not by eye:** the first choice failed:
+  - **Approved green vs Declined red: ΔE 5.6 for deuteranopes** (red-green colour blindness), i.e. indistinguishable.
+  - Slate "Draft" read as grey.
+  - Fixed by dropping Draft from the bar (it isn't part of the review pipeline) and using a **darker red (rose-700)**, so the pair differs in lightness. Result: **all checks pass, worst CVD ΔE 8.9** (target ≥ 8).
+- **Contrast WARN → visible labels:** amber/emerald fills are < 3:1 on white, so values are never colour-only. Every segment has a legend entry with its exact count and %.
+- **Text never wears the data colour:** labels and values use ink tokens; colour is only on the small dot/segment (light hues like amber are illegible as text).
+- **Proportional figures for big numbers:** stat-tile values don't use tabular digits (those are for aligned columns; at display size they look loose).
+- **Percentages that add up:** rounding each share separately showed 38+13+38+13 = **102%**. The **largest-remainder method** floors every share, then gives the leftover points to the largest fractional parts, so the total is always exactly 100%.
+- **Approval rate uses decided applications only** (approved ÷ (approved + declined)); pending ones aren't failures.
+- **Tooltips enhance, never gate:** everything in a tooltip is also in the legend.
+
+### How to test
+Real browser, **11/11** (applications seeded in every status, some dated last year; every figure compared with the API's own answer):
+- **All time:** tiles, approval rate (75%), total ($75,000), "Across 3 approved loans", legend counts with **percentages summing to 100**, drafts note.
+- **Bar:** one segment per non-empty status; tooltip on **hover** and **keyboard focus**.
+- **"This year":** `aria-pressed`, figures switch to `?since=` numbers (last year's rows excluded, total $60,000).
+- **Error:** API 500 → error + retry → recovers.
+- **Layout:** no mobile overflow; no JS errors.
+
+### Interview points
+- *"How do you make charts accessible?"* — Validate colours for colour-vision deficiency (not just "looks fine"), never encode meaning by colour alone (labels + counts), keyboard-focusable marks with tooltips, and a text/table equivalent.
+- *"Why did you change the red?"* — Red and green at similar lightness collapse for ~8% of men. A darker red keeps them apart by lightness, which every reader can see. The validator measured ΔE 5.6 → 8.9.
+- *"Why do your percentages always add to 100?"* — The largest-remainder method. Independent rounding can produce 99% or 101%, which looks like an error on a finance dashboard.
+
+---
+
+<!-- Next: 10.2 applications table + filters + pagination -->

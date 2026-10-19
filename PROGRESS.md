@@ -132,6 +132,18 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** a customer can complete the whole application flow in the browser.
 
+## Phase 10 — Admin UI (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Stats cards | Done | `StatsOverview`: period filter (`?since=`), 4 stat tiles (awaiting, under review, approved + approval rate, total approved compact), `PipelineBar` stacked bar (2px gaps, hover/focus tooltips, legend = table view). Palette **validated** (fixed red/green CVD clash: rose-700, worst ΔE 8.9). Largest-remainder % (always 100). E2E 11/11. |
+| 2 | Applications table + filters + pagination | Todo | |
+| 3 | Detail page | Todo | |
+| 4 | Approve/reject modals | Todo | |
+| 5 | Audit trail view | Todo | |
+
+**Done when:** an admin can review and decide applications in the browser.
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema
