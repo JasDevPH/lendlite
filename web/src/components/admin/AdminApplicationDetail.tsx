@@ -18,6 +18,7 @@ import { useApi } from '@/lib/useApi';
 import { EMPLOYMENT_OPTIONS } from '@/lib/validation/application';
 import { AffordabilitySnapshot } from './AffordabilitySnapshot';
 import { ApproveDialog } from './ApproveDialog';
+import { AuditTrail } from './AuditTrail';
 import { RejectDialog } from './RejectDialog';
 
 export function AdminApplicationDetail() {
@@ -99,6 +100,11 @@ export function AdminApplicationDetail() {
                 ))}
               </ul>
             )}
+          </InfoCard>
+
+          <InfoCard title="Audit trail">
+            {/* key: every status change bumps updatedAt → remount → fresh trail */}
+            <AuditTrail key={app.updatedAt} applicationId={app.id} />
           </InfoCard>
         </div>
 

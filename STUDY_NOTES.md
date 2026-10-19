@@ -2636,4 +2636,52 @@ Real browser, **19/19**: **Phase 10 done-when** — an admin reviews and decides
 
 ---
 
-<!-- Next: 10.5 audit trail view -->
+## 10.5 Audit trail view
+
+### What it does
+- **`components/admin/AuditTrail`:** an "Audit trail" card on `/admin/applications/[id]`, loaded from `GET /admin/applications/:id/audit` (admin-only).
+- A **vertical timeline, oldest first**. Each entry shows:
+  - **What happened:** icon + label per action (`ACTION_META`): Application started, Document uploaded, Submitted for review, Review started, Approved, Declined.
+  - **Status change**, when there is one: "Submitted → Under review".
+  - **When:** a `<time dateTime=…>` element.
+  - **Who:** "by Ada Admin (Admin)" / "by Audrey Audit (Customer)", or *Deleted user* if the actor no longer exists.
+  - **Details read from the entry's `metadata` JSON:**
+    - Approved: rate · monthly payment · installments · total interest.
+    - Declined: the quoted reason.
+    - Upload: document type + file name.
+- Metadata is free-form JSON, so it's read with small type guards (`num()`, `str()`). A missing field is simply skipped, never crashes.
+- **Auto-refresh:** the card is rendered with `key={app.updatedAt}`. Every status change bumps `updatedAt` → React remounts the component → it fetches the fresh trail. No extra wiring between the action buttons and the trail.
+- Loading skeleton, empty state, error + "Try again".
+
+### Why
+- **Auditability is a core fintech requirement:** lenders must be able to show *who* decided *what*, *when*, and *why* (e.g. for complaints or regulator review). The backend already writes an `AuditLog` row in the same transaction as each transition; this view makes it usable.
+- **Admin-only:** the trail includes internal actors and metadata, so it lives on the admin page. The customer gets a simplified status timeline instead.
+- **The `key` trick:** a remount on a changed key is a standard React way to reset a component. It's simpler and less error-prone than lifting a `reload` callback through the tree.
+- **Deleted users:** the audit row outlives the user (`actorId` has no FK), so history is never lost. The UI must handle `actor: null`.
+- **Checked a suspected bug:** the decline textarea looked tinted while the reason was valid. The test measured it: no `aria-invalid`, no error class. The tint was just the 150 ms border transition from the brand focus colour back to neutral, so no change was needed.
+
+### How to test
+Real browser, **11/11**:
+- **Customer events:** 4 entries in order (started, 2 uploads with "Photo ID — id.pdf" / "Recent payslip — payslip.pdf", submitted "Draft → Submitted" by the customer). They match the API's audit endpoint exactly.
+- **Refresh:** clicking **Start review** adds "Review started · Submitted → Under review · by Ada Admin (Admin)" without a page reload.
+- **Decline via dialog:** "Under review → Declined" with the quoted reason. The textarea border equals the neutral `line` colour with a valid reason.
+- **Approve:** the entry shows "Rate 9.95% p.a. · $703.14/month · 12 installments · $437.69 total interest", the same numbers as the stored metadata.
+- **Deleted actor:** entries are kept and shown as "Deleted user".
+- **Mobile:** 390 px, no overflow; no JS errors.
+
+### Interview points
+- *"Why keep an audit log, and how is it reliable?"* — Every transition writes its audit row **inside the same DB transaction** as the status change, so the log can never disagree with the data. The admin UI renders it as a timeline: who, what, when, why.
+- *"How does the trail update after an action?"* — It's keyed by the application's `updatedAt`. A new key means React mounts a fresh component, which refetches. It's one line, with no shared state.
+- *"What if the user who did something is deleted?"* — The audit row stays (no cascading delete through the actor), and the UI shows "Deleted user". History must be append-only and survive user changes.
+- *"How do you handle untyped JSON (metadata)?"* — Treat it as `unknown` and narrow with type guards before use. Bad or missing data degrades gracefully instead of crashing the page.
+
+---
+
+# ✅ Phase 10 complete
+
+Admin UI: a stats overview (raw-SQL stats, validated colour-blind-safe pipeline bar), a filterable, paginated review queue driven by the URL, a detail page with an affordability snapshot and status-driven actions, accessible approve/decline dialogs with a live repayment preview and race handling, and an audit trail timeline. **An admin can review and decide applications in the browser**, with every step visible in the audit trail.
+
+---
+
+<!-- Next: Phase 11 — DevOps & polish -->
+

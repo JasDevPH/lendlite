@@ -132,7 +132,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** a customer can complete the whole application flow in the browser.
 
-## Phase 10 — Admin UI (in progress)
+## Phase 10 — Admin UI ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -140,7 +140,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 2 | Applications table + filters + pagination | Done | `ApplicationsTable`: URL-driven filters (`?status=&min=&max=&page=`, dollars→cents), validation, accessible table with Review links, pagination summary + Prev/Next, keep-previous-while-loading, empty/error states. Fixed sr-only page overflow (`relative` on scroll box; also schedule table). E2E 15/15. |
 | 3 | Detail page | Done | `/admin/applications/[id]`: header (applicant), status-driven `ActionPanel` (Start review; refetch on 409 race), `AffordabilitySnapshot` (income vs expenses vs repayment range, indicative band), documents by type, schedule, Loan/Applicant/Dates cards. API: detail now includes `user {id, fullName, email}` (+ test). Shared `InfoCard`/`DetailRow`. E2E 16/16. |
 | 4 | Approve/reject modals | Done | Native `<dialog>` `Modal` (inert background, Escape, focus return), `ApproveDialog` (rate % → bps, presets, live quote preview, "Approve at X% p.a."), `RejectDialog` (trimmed-length counter, customer-facing reason), fresh mount per open + close on Activity hide, 409 → refetch. **Done-when met** (admin decides in browser). E2E 19/19 incl. race (no schedule created). |
-| 5 | Audit trail view | Todo | |
+| 5 | Audit trail view | Done | `AuditTrail` card on the admin detail page (from `GET /admin/applications/:id/audit`): vertical timeline oldest-first, per-action icon/label, "From → To" status, who (name + Admin/Customer, or "Deleted user"), when, details from metadata (approved rate/monthly/installments/total interest, quoted decline reason, document type + file). Keyed by `updatedAt` → refreshes after each status change. Loading/empty/error+retry. Checked the decline textarea: no error styling (the tint was the border mid-transition after blur). E2E 11/11. |
 
 **Done when:** an admin can review and decide applications in the browser.
 
@@ -154,5 +154,5 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 7 — Backend tests
 - [x] Phase 8 — Frontend setup & auth
 - [x] Phase 9 — Customer UI
-- [ ] Phase 10 — Admin UI
+- [x] Phase 10 — Admin UI
 - [ ] Phase 11 — DevOps & polish
