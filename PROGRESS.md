@@ -112,7 +112,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | Next.js + Tailwind init | Done | Next **16.4.2** (App Router, `src/`, Cache Components + Partial Prefetching), React 19.3, **Tailwind v4** `@theme` tokens (brand/navy palette, semantic colours, card shadows, `money` tabular-nums utility), Inter via `next/font`, `Logo` component, placeholder fintech landing page. Build/lint/typecheck pass; screenshots checked at desktop + mobile. |
-| 2 | `lib/api.ts` (typed fetch wrapper) | Todo | |
+| 2 | `lib/api.ts` (typed fetch wrapper) | Done | `ApiError` (+ `fieldErrors()`), `request<T>` unwraps `{data}`, JSON/FormData, Bearer token (in memory), central 401 handler, network error mapping, `download` → Blob. Plus `lib/types.ts` (API shapes) and `lib/format.ts` (en-AU money/rate/date, safe dollar parsing). Verified against live API. |
 | 3 | Auth context/store | Todo | |
 | 4 | Login/register pages | Todo | |
 | 5 | Protected route guard | Todo | |

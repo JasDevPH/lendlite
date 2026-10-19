@@ -1914,4 +1914,52 @@ Verified: typecheck + lint + production build pass; screenshots at 1440px and 50
 
 ---
 
-<!-- Next: 8.2 lib/api.ts -->
+## 8.2 `lib/api.ts` (typed fetch wrapper) + `lib/types.ts` + `lib/format.ts`
+
+### What it does
+- **`lib/types.ts`:** TypeScript shapes of everything the API returns (`User`, `LoanApplication(Detail)`, `LoanDocument`, `Installment`, `Quote`, `AdminApplicationRow`, `AuditEntry`, `AdminStats`, `Pagination`, `ApiErrorBody`), mirroring the backend. Money = cents, rates = bps, dates = ISO strings.
+- **`lib/api.ts`:**
+  - `API_URL` comes from `NEXT_PUBLIC_API_URL`.
+  - **`ApiError`** (`status`, `code`, `message`, `details`) is the *only* error type UI code handles. `fieldErrors()` turns a 400 `VALIDATION_ERROR` into `{ email: 'Invalid email address', … }` for forms.
+  - **`request<T>()`**:
+    - Sets JSON headers (or lets the browser set multipart for `FormData`).
+    - Adds `Authorization: Bearer <token>`.
+    - **Unwraps `{ data }`**, and turns `{ error }` into `ApiError`.
+    - Network failure → `ApiError(0, 'NETWORK_ERROR', friendly message)`.
+  - **Token lives in memory** (`setAuthToken`). The auth layer decides persistence.
+  - **`setUnauthorizedHandler`:** any 401 on an authenticated request triggers one central logout.
+  - `api.get / post / patch / upload(FormData) / download(→ Blob)`.
+- **`lib/format.ts`:** `formatCents` ($888.49), `formatCentsWhole` ($15,000), `formatRate` (12.50% p.a.), `formatDate` (19 Nov 2026), `formatDateTime`, `formatMonths`, and `parseDollarsToCents` (string-based, no float maths).
+
+### Why
+- **One place for HTTP concerns:** base URL, auth header, JSON, error shape. Components just call `api.get<LoanApplication[]>('/applications')`, with no `fetch` boilerplate scattered around.
+- **Typed responses (`api.get<T>`):** autocomplete and compile errors when the UI reads a field that doesn't exist.
+- **One error type with a stable `code`:** the UI can react precisely (`EMAIL_TAKEN` → message under the email field; `NETWORK_ERROR` → "check your connection"), mirroring the backend's error design.
+- **`NEXT_PUBLIC_` prefix:** only env vars with this prefix reach the browser bundle. They're inlined at build time, so they must be referenced literally. Never put secrets in them.
+- **Don't set `Content-Type` for FormData:** the browser must add the multipart *boundary* itself; setting it manually breaks uploads.
+- **Downloads via `fetch` → Blob:** a plain `<a href>` can't send the `Authorization` header, so authenticated files must be fetched with JS.
+- **Central 401 handler:** an expired token (1h) anywhere logs the user out once, consistently, instead of every page handling it.
+- **Separation of concerns:** `api.ts` attaches a token but doesn't know about `localStorage`, so storage strategy can change (e.g. to httpOnly cookies) without touching the HTTP client.
+- **Formatting only in the UI:** the API sends exact integers; humans see `en-AU` currency/dates. `parseDollarsToCents` splits on `.` instead of `× 100` to avoid `19.99 * 100 = 1998.9999…`.
+
+### How to test
+Verified from Node against the running API:
+```
+formatCents(88849) → $888.49 · formatRate(1250) → 12.50% p.a. · formatDate → 19 Nov 2026
+parseDollarsToCents("$15,000.5") → 1500050 · "abc" / "1.234" → null
+POST /calculator/quote          → unwrapped data, 88849
+wrong password                  → ApiError 401 INVALID_CREDENTIALS
+invalid register                → ApiError 400, fieldErrors() = {email, password, fullName}
+GET /auth/me with token         → Casey Customer
+GET /auth/me with bad token     → ApiError 401, unauthorized handler called once
+API stopped                     → ApiError 0 NETWORK_ERROR, friendly message
+```
+
+### Interview points
+- *"How does your frontend talk to the API?"* — Through one typed wrapper that handles the base URL, auth header, JSON, response unwrapping and error normalisation into a single `ApiError` type.
+- *"How do you handle an expired token on the client?"* — The wrapper detects any 401 on an authenticated call and invokes a single logout handler registered by the auth layer.
+- *"Why not put the API secret / JWT secret in `NEXT_PUBLIC_*`?"* — Those values ship to every browser. Only public config (like the API URL) belongs there.
+
+---
+
+<!-- Next: 8.3 auth context/store -->
