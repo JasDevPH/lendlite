@@ -142,6 +142,35 @@ export async function reject(id: string, admin: AuthUser, reason: string) {
 
 // ---------- Queries ----------
 
+// Full history of one application, oldest first, with who did each step
+export async function getAuditTrail(applicationId: string) {
+  // Distinguish "no such application" (404) from "application with no history" ([])
+  const exists = await prisma.loanApplication.count({ where: { id: applicationId } });
+  if (!exists) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+
+  const entries = await prisma.auditLog.findMany({
+    where: { applicationId },
+    // id breaks ties when two entries share a timestamp
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+
+  // actorId has no FK (audit rows must outlive user changes), so Prisma can't
+  // `include` the actor. Load all actors in ONE query instead of one per row
+  // (avoids the "N+1 queries" problem), then join in memory.
+  const actorIds = [...new Set(entries.map((e) => e.actorId))];
+  const actors = await prisma.user.findMany({
+    where: { id: { in: actorIds } },
+    select: { id: true, fullName: true, email: true, role: true },
+  });
+  const actorsById = new Map(actors.map((a) => [a.id, a]));
+
+  return entries.map(({ actorId, ...entry }) => ({
+    ...entry,
+    // null if that user was since deleted — the history itself is kept
+    actor: actorsById.get(actorId) ?? null,
+  }));
+}
+
 export interface Pagination {
   page: number;
   pageSize: number;

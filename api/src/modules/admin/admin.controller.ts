@@ -31,3 +31,10 @@ export const reject = asyncHandler(async (req, res) => {
   const application = await adminService.reject(id, req.user!, reason);
   res.json({ data: application });
 });
+
+// GET /admin/applications/:id/audit
+export const auditTrail = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const entries = await adminService.getAuditTrail(id);
+  res.json({ data: entries });
+});

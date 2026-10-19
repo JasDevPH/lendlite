@@ -17,3 +17,4 @@ adminRouter.get('/applications', validate({ query: listApplicationsQuerySchema }
 adminRouter.post('/applications/:id/start-review', idParams, adminController.startReview);
 adminRouter.post('/applications/:id/approve', idParams, validate({ body: approveBodySchema }), adminController.approve);
 adminRouter.post('/applications/:id/reject', idParams, validate({ body: rejectBodySchema }), adminController.reject);
+adminRouter.get('/applications/:id/audit', idParams, adminController.auditTrail);

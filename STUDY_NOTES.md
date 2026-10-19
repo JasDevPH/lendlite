@@ -1519,4 +1519,53 @@ Verified:
 
 ---
 
-<!-- Next: 6.5 audit trail endpoint -->
+## 6.5 Audit trail — `GET /admin/applications/:id/audit`
+
+### What it does
+`getAuditTrail(applicationId)`:
+1. Checks the application exists → 404 if not (so "no such application" ≠ "empty history").
+2. Loads its audit rows, **oldest first** (`createdAt asc, id asc`).
+3. Collects the distinct `actorId`s and loads those users in **one** `findMany({ where: { id: { in: [...] } } })`, selecting only `id, fullName, email, role`.
+4. Joins in memory with a `Map`: each entry gets `actor: { … }`, or **`null`** if that user no longer exists. The raw `actorId` is replaced by the `actor` object.
+
+Response entry:
+```json
+{ "id": "…", "action": "APPROVED", "fromStatus": "UNDER_REVIEW", "toStatus": "APPROVED",
+  "metadata": { "annualRateBps": 1450, "monthlyPaymentCents": 74580, … },
+  "createdAt": "…", "actor": { "id": "…", "fullName": "Ada Admin", "email": "…", "role": "ADMIN" } }
+```
+
+### Why
+- **No FK on `actorId` (Phase 2 decision) → manual join:** an audit log is a historical record. It must survive users being changed or deleted, which a foreign key with RESTRICT/CASCADE would interfere with. The cost is that Prisma can't `include` the actor, so we join ourselves.
+- **Avoiding the N+1 query problem:** the naïve version does 1 query for the logs + **1 query per log row** for its actor (6 entries = 7 queries; 600 entries = 601). We do exactly **2 queries** regardless of size: logs, then all actors with `IN (…)`.
+- **`Map` lookup:** O(1) per entry instead of searching an array each time.
+- **`actor: null` for deleted users:** the history is never lost or broken; the UI can show "Deleted user". Verified by deleting the customer: all 6 entries remained.
+- **Explicit `select` on users:** never leak `passwordHash`.
+- **Tie-breaker in sort:** two events in the same millisecond still appear in a deterministic order.
+- **Admin-only:** inherited from the router guard. Customers see their status/timeline via their own application endpoint, not the internal audit log.
+
+### How to test
+```
+GET /api/v1/admin/applications/<id>/audit   (admin token)
+```
+Verified after a full lifecycle:
+```
+CREATED            ∅ → DRAFT                  by Audrey Applicant (CUSTOMER)
+DOCUMENT_UPLOADED  (no status change)         by Audrey Applicant  {"type":"ID",…}
+DOCUMENT_UPLOADED  (no status change)         by Audrey Applicant  {"type":"PAYSLIP",…}
+SUBMITTED          DRAFT → SUBMITTED          by Audrey Applicant
+REVIEW_STARTED     SUBMITTED → UNDER_REVIEW   by Ada Admin (ADMIN)
+APPROVED           UNDER_REVIEW → APPROVED    by Ada Admin  {"installments":18,"annualRateBps":1450,…}
+```
+- No `passwordHash` anywhere.
+- After deleting the customer: 6 entries remain, their `actor` = `null`.
+- Unknown id → **404**; customer token → **403**.
+
+### Interview points
+- *"What's the N+1 problem and how did you avoid it?"* — Fetching a list, then running one extra query per item. I batch-load all related users with a single `IN` query and join in memory: 2 queries total, constant regardless of list size.
+- *"Why doesn't your audit log use a foreign key to users?"* — Audit records are immutable history and must outlive the users they mention. Integrity of *new* entries is guaranteed by the code that writes them (always the authenticated user's id).
+- *"Why is an audit trail important in lending?"* — Regulators, dispute resolution and internal fraud checks all need to answer "who did what, when, and with what values". Ours records every status change and document upload, written atomically with the change itself.
+
+---
+
+<!-- Next: 6.6 stats endpoint (raw SQL) -->
