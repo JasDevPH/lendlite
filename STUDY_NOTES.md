@@ -589,4 +589,68 @@ Verified with a throwaway script against Neon (test user deleted afterwards):
 
 ---
 
-<!-- Next: 3.3 auth.controller.ts + routes -->
+## 3.3 `auth.controller.ts` + `auth.routes.ts` (+ `validate`, `asyncHandler`, `req.user` type)
+
+### What it does
+- **`utils/asyncHandler.ts`** wraps an async route handler so any rejected promise is passed to `next(err)` → central `errorHandler`.
+- **`middleware/validate.ts`** takes `validate({ body?, query?, params? })` and runs the Zod schemas. The **parsed output replaces** `req.body`/`req.query`/`req.params`, so controllers get cleaned data (trimmed, lowercased, unknown fields stripped). A `ZodError` → 400 `VALIDATION_ERROR`.
+- **`auth.controller.ts`** has three HTTP-only handlers: `register` (→ **201**), `login` (→ 200), `me` (→ 200, route added with the auth middleware in 3.4). Each is ~2 lines: call the service, send `{ data }`.
+- **`auth.routes.ts`** wires the route → validation → controller chain:
+  ```
+  POST /api/v1/auth/register   validate(registerSchema) → register
+  POST /api/v1/auth/login      validate(loginSchema)    → login
+  ```
+- **`types/express.d.ts`** adds `req.user?: { id, role }` to Express's `Request` type (*declaration merging*).
+- **`app.ts`** mounts it with `api.use('/auth', authRouter)`.
+
+### Why
+- **Layering: routes → controller → service → Prisma.** Each layer has one job:
+  - Routes: URL + middleware chain.
+  - Controller: HTTP in/out.
+  - Service: business rules.
+  - Prisma: data.
+  This is easy to test, easy to find things, and business logic can be reused outside HTTP.
+- **`asyncHandler`:** in Express 4 a thrown error inside an `async` function becomes a rejected promise that Express ignores. The request hangs, and Node logs an unhandled rejection. One wrapper fixes it everywhere, with no try/catch in every controller.
+- **Validation as middleware:** declared per route, so you can see a route's rules at a glance. The controller never runs with bad input.
+- **Replacing `req.body` with parsed output:** this is where mass-assignment protection actually happens (stripped `role`) and where normalisation (lowercased email) takes effect.
+- **201 for register:** HTTP semantics, since a new resource was created. Login creates nothing, so 200.
+- **`req.user!` in `me`:** the `!` asserts it's set, which is safe because the auth middleware guarantees it on that route.
+- **Request logs never include bodies** (we trimmed pino-http in 1.5), so passwords from login/register never reach logs.
+
+### How to test
+```bash
+# with `npm run dev` running:
+curl -s -X POST http://localhost:4001/api/v1/auth/register -H "Content-Type: application/json" \
+  -d '{"email":"jo@test.dev","password":"secret123","fullName":"Jo Bloggs"}'
+curl -s -X POST http://localhost:4001/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"admin@lendlite.dev","password":"Admin1234"}'
+```
+(PowerShell: use `curl.exe` and escape quotes, or Thunder Client / Postman in VS Code.)
+
+Verified:
+
+| Request | Result |
+|---|---|
+| register `"  CURL-…@TEST.DEV "` + `role:"ADMIN"` | **201**, email lowercased, role **CUSTOMER** |
+| register same email | **409** `EMAIL_TAKEN` |
+| register `{email:"nope", password:"short"}` | **400** with 4 field errors |
+| login seeded admin | **200** token + user (role ADMIN), no passwordHash |
+| login wrong password | **401** `INVALID_CREDENTIALS` |
+| login empty body | **400** email/password Required |
+
+### Interview points
+- *"Walk me through what happens on POST /auth/login."* —
+  1. helmet/cors/json parse.
+  2. pino-http starts timing.
+  3. Router matches `/api/v1/auth/login`.
+  4. `validate` parses the body with Zod (400 if bad).
+  5. Controller calls `authService.login`.
+  6. Service finds the user, bcrypt-compares, signs the JWT (or throws 401).
+  7. Controller sends `{ data: { token, user } }`, or `asyncHandler` forwards the error to `errorHandler`, which formats it.
+- *"Why keep controllers thin?"* — Business logic in services can be unit-tested without HTTP and reused (seeds, jobs). Controllers just translate HTTP ↔ function calls.
+- *"How do you add properties to Express's Request in TypeScript?"* — Declaration merging: `declare global { namespace Express { interface Request { user?: … } } }`.
+- *"Why does Express 4 need an async wrapper?"* — Its router only catches *synchronous* throws. Promises must be caught and passed to `next(err)`. Express 5 does this natively.
+
+---
+
+<!-- Next: 3.4 middleware/auth.ts -->

@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { authRouter } from './modules/auth/auth.routes';
 import { AppError } from './utils/AppError';
 
 // Builds the Express app WITHOUT calling listen(), so tests (Supertest)
@@ -58,6 +59,8 @@ api.get('/health', async (_req, res, next) => {
     },
   });
 });
+
+api.use('/auth', authRouter);
 
 app.use('/api/v1', api);
 
