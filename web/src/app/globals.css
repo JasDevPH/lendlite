@@ -56,6 +56,12 @@
     font-family: var(--font-sans);
   }
 
+  /* Edge/IE add their own password-reveal and clear buttons; we provide our own */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
   /* Visible, consistent keyboard focus everywhere (accessibility) */
   :focus-visible {
     outline: 2px solid var(--color-brand-500);

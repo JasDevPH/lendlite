@@ -114,7 +114,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 1 | Next.js + Tailwind init | Done | Next **16.4.2** (App Router, `src/`, Cache Components + Partial Prefetching), React 19.3, **Tailwind v4** `@theme` tokens (brand/navy palette, semantic colours, card shadows, `money` tabular-nums utility), Inter via `next/font`, `Logo` component, placeholder fintech landing page. Build/lint/typecheck pass; screenshots checked at desktop + mobile. |
 | 2 | `lib/api.ts` (typed fetch wrapper) | Done | `ApiError` (+ `fieldErrors()`), `request<T>` unwraps `{data}`, JSON/FormData, Bearer token (in memory), central 401 handler, network error mapping, `download` → Blob. Plus `lib/types.ts` (API shapes) and `lib/format.ts` (en-AU money/rate/date, safe dollar parsing). Verified against live API. |
 | 3 | Auth context/store | Done | `lib/auth.ts` (guarded localStorage) + `AuthProvider`/`useAuth`: tri-state status (loading/authenticated/anonymous), login/register/logout, session restore via `/auth/me` (401 clears token, network error keeps it), central 401 → logout, cross-tab logout. Mounted in root layout. Build passes; runtime verified with 8.4 pages. |
-| 4 | Login/register pages | Todo | |
+| 4 | Login/register pages | Done | UI primitives (`Button`, `TextField`/`PasswordField`, `Alert`, `Spinner`), Zod client validation, `AuthShell` split layout, `/login` (demo accounts, safe `?next=`, role redirect) + `/register` (live password checklist, EMAIL_TAKEN inline). Temporary `/dashboard` + `/admin` placeholders. Browser e2e (Edge + playwright-core): 19/19, no mobile overflow. |
 | 5 | Protected route guard | Todo | |
 | 6 | Layout/nav | Todo | |
 

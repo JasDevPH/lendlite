@@ -2001,4 +2001,56 @@ Typecheck, lint and production build pass with the provider in the root layout. 
 
 ---
 
-<!-- Next: 8.4 login/register pages -->
+## 8.4 Login + register pages (with shared UI primitives)
+
+### What it does
+- **UI primitives (`components/ui/`)**, reused by every future form:
+  - `Button`: primary/secondary/ghost/danger, `loading` spinner, disabled while loading; plus `buttonClasses()` for links.
+  - `TextField` / `PasswordField`: label linked via `htmlFor`; hint/error via `aria-describedby`; `aria-invalid`; red error state; Show/Hide toggle.
+  - `Alert`: error/success/info, `role="alert"` for errors.
+  - `Spinner`.
+- **`lib/validation/auth.ts`:** Zod `loginSchema` / `registerSchema` mirroring the API's rules, `PASSWORD_RULES` for the live checklist, and `toFieldErrors()`.
+- **`lib/redirects.ts`:**
+  - `homeFor(role)`: ADMIN → `/admin`, CUSTOMER → `/dashboard`.
+  - `safeNextPath()`: only same-site paths, so it's **not an open redirect**.
+- **`AuthShell`:** split layout. A navy brand panel with trust points (desktop only); the form column (mobile-first).
+- **`/login`** (`app/(auth)/login`):
+  - Client-side Zod check → `login()`.
+  - Errors: `INVALID_CREDENTIALS` → "Incorrect email or password."; `RATE_LIMITED` / network → the API's friendly message.
+  - Redirect in **one effect** (to `?next=` if safe, else by role), which also covers "already logged in".
+  - Demo-accounts box.
+- **`/register`:** full name/email/password, a **live password checklist** (✓ turns green as rules are met), `EMAIL_TAKEN` → inline error + "Log in instead →".
+- **Temporary `/dashboard` and `/admin`** (`SessionPlaceholder`): show "Welcome, name" + Log out, to prove the flow. Replaced in 8.5/8.6 and Phases 9–10.
+- `(auth)` is a **route group**: it organises files without adding `/auth` to the URL.
+
+### Why
+- **Client-side validation is UX, server validation is security:** instant feedback in the browser, but the API still validates everything, because browser code can be bypassed.
+- **`noValidate` on forms:** consistent, styled, accessible messages instead of the browser's inconsistent popups.
+- **Map error *codes* to UI:** the same `ApiError.code` design from the backend lets each error land in the right place (field vs banner).
+- **Disable the button while submitting:** prevents double registrations / double logins.
+- **Open-redirect protection:** without `safeNextPath`, `/login?next=https://evil.com` would send users to a phishing site *after a real login on our domain*.
+- **Accessibility:** labels tied to inputs, errors announced (`role="alert"`, `aria-describedby`), `autocomplete` hints (`email`, `current-password`, `new-password`) so password managers work, visible focus rings.
+- **Form in the static HTML:** reading `?next=` via `useSearchParams` forced a Suspense boundary, so the first paint was a grey skeleton (spotted in a screenshot). Reading it from `window.location` only when redirecting keeps the form in the prerendered HTML: it **appears instantly**, even before JavaScript loads.
+- **Hide Edge's built-in password reveal (`::-ms-reveal`):** otherwise users saw two "show" controls.
+
+### How to test
+Automated in a real browser (Microsoft Edge via `playwright-core`, API on the local Docker DB): **19/19 checks**.
+- **Errors:** empty submit → field errors; wrong password → alert.
+- **Login:** customer → `/dashboard`; token stored; **survives refresh**; `/login` while logged in → redirect.
+- **Logout and tokens:** logout clears the token; a garbage stored token → logged out + cleared.
+- **Redirects:** `?next=https://evil…` ignored; admin → `/admin`.
+- **Register:** field errors, malformed email; register → dashboard; duplicate email (any case) → inline error + link.
+- **Rendering:** no console/JS errors; **no horizontal overflow at a true 390 px mobile viewport** on `/`, `/login`, `/register`.
+- Screenshots reviewed at 1440 px and 390 px.
+
+*Debugging story:* the e2e test once timed out on login. It was **our own rate limiter** (5 logins/min) blocking the second run. Restarting the API reset the in-memory counters, which is exactly the "in-memory store" limitation noted in 3.6.
+
+### Interview points
+- *"Why validate on both client and server?"* — Client: fast feedback. Server: the only validation you can trust.
+- *"What's an open redirect and how did you prevent it?"* — Using an attacker-controlled URL parameter as a redirect target. I only allow relative paths starting with a single `/`.
+- *"How did you make the forms accessible?"* — Real `<label>`s, `aria-invalid`/`aria-describedby`, `role="alert"` errors, autocomplete hints, keyboard-visible focus, and no reliance on colour alone (✓/○ plus screen-reader text).
+- *"How did you test the UI?"* — Scripted browser tests (Playwright driving Edge) for the full auth flow and mobile overflow, plus reviewing screenshots.
+
+---
+
+<!-- Next: 8.5 protected route guard -->
