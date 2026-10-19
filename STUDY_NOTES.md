@@ -2927,5 +2927,42 @@ docker compose down              # add -v to wipe DB + uploads
 
 ---
 
-<!-- Next: 11.7 README -->
+## 11.7 README
+
+### What it does
+- **The root `README.md` is the project's front door.** It's ordered for its real readers:
+  1. **Interviewers/recruiters** (first 30 seconds): a CI badge, a one-paragraph pitch, the **live demo link + demo logins**, and screenshots from the live site.
+  2. **Engineers evaluating the work:** tech stack, a **Mermaid architecture diagram** and **status-machine diagram** (GitHub renders them), the folder map, and a **design-decisions table** that pairs each choice with *why*.
+  3. **Developers running it:** `docker compose up --build` (one command), or dev servers with hot reload, plus tests, scripts, the API table and CI/CD.
+  4. **"What I built"** and **"What I'd do next"**.
+- `web/README.md` (create-next-app boilerplate) was replaced with a short pointer to the root README.
+
+### Why
+- **Reviewers skim:** the live link and demo credentials come before any setup instructions. Most people will click, not clone.
+- **Decisions over descriptions:** "money is integer cents *because floats can't represent 0.1*" shows judgment. A feature list doesn't.
+- **Honest trade-offs:** the README says plainly that the JWT lives in `localStorage` for simplicity and that production would use an `httpOnly` cookie. It also notes the Postgres 16/18 difference. Owning limitations reads better than hiding them.
+- **Diagrams as code (Mermaid):** they're versioned with the repo, render on GitHub, and never go stale as image files.
+
+### How to test
+- Open https://github.com/JasDevPH/lendlite: the badge is green, the diagrams render, and the screenshots load.
+- Follow "Option A" on a clean machine: it's exactly what the CI `compose` job does on every push.
+
+### Interview points
+- *"Tell me about a project you're proud of."* — Walk through the README top to bottom: live demo → architecture → three or four design decisions with their "why" → CI/CD → what I'd do next.
+- *"What would you improve?"* — The "What I'd do next" list: `httpOnly` cookie sessions, API linting, Playwright in CI, background jobs for notifications, version parity for Postgres.
+
+---
+
+# ✅ Phase 11 complete — project done
+
+DevOps & polish:
+- Multi-stage, non-root Docker images for the API and web.
+- Pluggable storage, with private Cloudinary documents in production.
+- One-command Docker Compose stack with a seed job.
+- GitHub Actions CI: tests on a real Postgres, builds, audits, and a fresh-clone compose smoke test.
+- Railway deployment that only ships green builds.
+- A README that sells the project in 30 seconds and explains it in 5 minutes.
+
+**LendLite is live:** https://web-production-a5b6c.up.railway.app
+
 

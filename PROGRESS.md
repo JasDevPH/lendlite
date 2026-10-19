@@ -144,7 +144,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** an admin can review and decide applications in the browser.
 
-## Phase 11 — DevOps & polish (in progress)
+## Phase 11 — DevOps & polish ✅ Complete
 
 **Deploy target: Railway** (via the local Railway CLI).
 
@@ -156,7 +156,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 4 | Full docker-compose | Done | `db` → one-shot `seed` (Dockerfile `build` stage, which has tsx: `migrate deploy` + idempotent `db seed`) → `api` (waits for seed `service_completed_successfully`, `uploads` named volume, local storage) → `web` (waits for api `service_healthy`, `NEXT_PUBLIC_API_URL=http://localhost:4001/api/v1` build arg). Shared `x-api-env` anchor; `JWT_SECRET` local-only default overridable via root `.env`. Ports bound to 127.0.0.1. `docker compose config` valid; images tested individually. Full fresh-clone run couldn't finish locally (8 GB RAM, Docker stopped mid-build) → verified by the CI `compose` job on GitHub runners: fresh clone, seed exit 0, DB ok, demo logins, upload survives API restart, web renders. |
 | 5 | GitHub repo (public) + Actions CI | Done | Public repo **https://github.com/JasDevPH/lendlite** (history scanned for secrets first: only placeholders; `.env` never committed). `.github/workflows/ci.yml` on push to main + PRs: **api** (Postgres 16 service, `npm ci`, prisma generate, typecheck, 89 tests, build, `npm audit --omit=dev`), **web** (lint, typecheck, build, audit), **compose** (needs both; `docker compose up --build` from the checkout + curl/jq smoke test; logs on failure; `down -v` always). Concurrency cancels superseded runs; `permissions: contents: read`. First run green in ~2.5 min. Note: API has no ESLint yet (web only). |
 | 6 | Railway deploy (GitHub-linked auto-deploy, "Wait for CI") | Done | **Live:** web https://web-production-a5b6c.up.railway.app · API https://api-production-01fb.up.railway.app/api/v1/health. Railway project `lendlite` (region US-East): **Postgres** (template, **PG 18** — volume already initialised, so not downgraded to 16; schema is plain SQL, CI still tests on 16), **api** (root `/api`, Dockerfile, healthcheck `/api/v1/health`, watch `/api/**`, restart on failure), **web** (root `/web`, healthcheck `/`, watch `/web/**`). Vars: `DATABASE_URL=${{Postgres.DATABASE_URL}}` (private network), `WEB_ORIGIN=https://${{web.RAILWAY_PUBLIC_DOMAIN}}`, `NEXT_PUBLIC_API_URL=https://${{api.RAILWAY_PUBLIC_DOMAIN}}/api/v1`, `TRUST_PROXY=1`, `STORAGE_DRIVER=cloudinary`; fresh `JWT_SECRET` + `CLOUDINARY_URL` set via stdin (never printed; fixed PowerShell's trailing newline). GitHub source on `main` with **Wait for CI** (`checkSuites: true`) on both services. Migrations run on container start; demo users seeded through a **temporary** TCP proxy, deleted afterwards (DB private-only). CLI `--service-config` didn't apply → used `railway api` GraphQL. Live smoke 12/12 (health, helmet, CORS, logins, Cloudinary upload + exact download, idempotent submit, approve → 24 rows to $0, calculator, both portals, audit trail, no JS errors). Demo approved application kept for reviewers. |
-| 7 | README | Todo | |
+| 7 | README | Done | Root `README.md` for interviewers first, then developers: CI badge, **live demo + demo logins**, 6 screenshots from the live site (`docs/screenshots/`), tech stack, Mermaid architecture + status-machine diagrams, folder map, **design decisions table** (cents, service-layer state machine, transaction, idempotency, 404-not-403, pure amortization, `$queryRaw`, private storage, app/server split, JWT localStorage vs httpOnly cookie, fail-fast config, trust proxy), local setup (compose or dev servers), tests, scripts, API table, CI/CD, "What I built" + next steps. `web/README.md` boilerplate replaced with a pointer. |
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation
@@ -169,4 +169,4 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 8 — Frontend setup & auth
 - [x] Phase 9 — Customer UI
 - [x] Phase 10 — Admin UI
-- [ ] Phase 11 — DevOps & polish
+- [x] Phase 11 — DevOps & polish
