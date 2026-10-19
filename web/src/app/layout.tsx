@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { AuthProvider } from '@/components/auth/AuthProvider';
 import './globals.css';
 
 // Inter: a highly legible UI typeface, common in fintech. next/font self-hosts
@@ -21,7 +22,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en-AU" className={`${inter.variable} h-full`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {/* Client-side auth state for every page (the layout itself stays a server component) */}
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

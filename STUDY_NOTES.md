@@ -1962,4 +1962,43 @@ API stopped                     → ApiError 0 NETWORK_ERROR, friendly message
 
 ---
 
-<!-- Next: 8.3 auth context/store -->
+## 8.3 Auth context/store (`lib/auth.ts` + `components/auth/AuthProvider.tsx`)
+
+### What it does
+- **`lib/auth.ts`**: `readStoredToken` / `storeToken` / `clearStoredToken` under the key `lendlite.token`. Every `localStorage` call is wrapped in try/catch.
+- **`AuthProvider`** (`'use client'`), mounted once in the root layout around all pages:
+  - **State:** `status` (`'loading' | 'authenticated' | 'anonymous'`) + `user`.
+  - **`login(email, password)` / `register({ email, password, fullName })`** call the API → `startSession`: store the token (localStorage + in-memory via `setAuthToken`), set the user, status `authenticated`. They return the `User` (so pages can redirect by role).
+  - **`logout()`** clears storage + memory, user `null`, status `anonymous`.
+  - **Restore on load (`useEffect`):**
+    - No stored token → `anonymous`.
+    - Otherwise call **`/auth/me`** to confirm the token is still valid → `authenticated`.
+    - On a **401** the stale token is cleared; on a network error it's **kept** (don't log people out for being briefly offline).
+  - **Registers `logout` as the API's 401 handler,** so an expired token mid-session logs out once, centrally.
+  - **Cross-tab logout:** listens for the `storage` event, so logging out in one tab logs out the others.
+  - The context value is **memoised**; callbacks use `useCallback`.
+- **`useAuth()`** hook throws if used outside the provider (fails fast on wiring mistakes).
+
+### Why
+- **React Context for auth:** many components need "who is logged in?" (nav, guards, pages). Context provides it without passing props through every level.
+- **Why a `'loading'` state:** the server prerenders pages without access to `localStorage`. Until the browser checks, we genuinely don't know. Without `loading`, a logged-in user would see a flash of the login page (or a redirect) on every refresh.
+- **Validate the stored token with `/auth/me`:** a token in storage may be expired or belong to a deleted user. Trusting it blindly would show a "logged in" UI whose API calls all fail.
+- **`useEffect` for storage access:** effects only run in the browser, after hydration, so there's no server/client HTML mismatch.
+- **`cancelled` flag:** if the component unmounts before `/auth/me` returns, we don't set state on an unmounted component.
+- **Persistence separated from HTTP:** `api.ts` only knows the in-memory token. Swapping localStorage for cookies later only touches `lib/auth.ts` + the provider.
+- **localStorage trade-off (spec, and a likely interview question):**
+  - **localStorage:** simple, and works across API domains. But **any script on the page can read it**, so an XSS bug = stolen token.
+  - **httpOnly cookie:** JS can't read it at all, so XSS can't steal it. The browser sends it automatically, which brings **CSRF** risk (mitigate with `SameSite=Lax/Strict` + CSRF tokens). It needs the API on the same site or careful CORS/credentials setup.
+  - Either way: short token expiry (1h), strict CSP, and avoiding `dangerouslySetInnerHTML` reduce XSS risk.
+
+### How to test
+Typecheck, lint and production build pass with the provider in the root layout. Runtime behaviour (restore, login, logout, expired token) is exercised in the browser with the login/register pages in **8.4**.
+
+### Interview points
+- *"Where do you store the JWT and why?"* — Memory + localStorage, as the spec asks. I can explain the XSS risk and why production would prefer an httpOnly SameSite cookie (plus CSRF protection).
+- *"How do you avoid the 'flash of logged-out content'?"* — A tri-state auth status. Guards and nav wait while it's `loading` and render a skeleton instead of guessing.
+- *"How does the frontend react to an expired token?"* — On load, `/auth/me` validates it; mid-session, the API client's 401 hook calls the provider's `logout`.
+
+---
+
+<!-- Next: 8.4 login/register pages -->
