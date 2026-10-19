@@ -25,7 +25,8 @@ export function ApplicationCard({ application }: { application: LoanApplication 
 
   return (
     <Link
-      href={`/applications/${id}`}
+      // Drafts reopen the application form; everything else shows the detail page
+      href={status === 'DRAFT' ? `/applications/new?draft=${id}` : `/applications/${id}`}
       // The whole card is one link: a large, easy target (especially on mobile)
       className="group flex flex-col rounded-card border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-raised"
     >

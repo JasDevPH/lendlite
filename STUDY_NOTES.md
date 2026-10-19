@@ -2236,4 +2236,51 @@ Real browser, **14/14** (fresh customer; 5 applications seeded, one per status, 
 
 ---
 
-<!-- Next: 9.3 multi-step application form -->
+## 9.3a Application wizard shell + Step 1 (loan details)
+
+*(The multi-step form is built one step at a time, as the spec asks. This is the shell + step 1.)*
+
+### What it does
+- **`/applications/new`** (`app/(customer)/applications/new/page.tsx`): `ApplicationWizard` inside `<Suspense>` (it uses `useSearchParams`).
+- **`ApplicationWizard`:**
+  - `STEPS` = Loan details → Employment & income → Documents → Review & submit.
+  - **The URL is the state:** `?draft=<id>&step=employment`. No draft → always step 1.
+  - Loads the draft with `useApi`. Handles **loading** (skeleton), **404** ("Application not found"), **errors** (retry), and **non-draft** ("already submitted", with a link to view it).
+  - `goTo(step)` uses `router.push`, so the browser **Back** button moves between steps.
+  - Reads the calculator's `?amount=&term=` **only if within limits** (never trust URLs).
+  - Steps 2–4 show a temporary "built next" panel with Back / Save & exit.
+- **`Stepper`:** an ordered list of 4 segments (done ✓ / current / upcoming), `aria-current="step"`, labels hidden on tiny screens (with screen-reader text kept).
+- **`LoanDetailsStep`:**
+  - **Fields:** amount (`$` prefix, `inputMode="decimal"`, typed `$` stripped), term (select 6…60 + any pre-filled value like 17), purpose (common options + **Other** → free-text box).
+  - **Zod `loanDetailsSchema`** turns form strings into the API shape: `"$15,000"` → `amountCents: 1500000` via string-based parsing, plus range checks with friendly messages, "Other" needs ≥3 chars.
+  - **Save:** first time `POST /applications` (creates the DRAFT), afterwards `PATCH /applications/:id`. API validation errors are mapped back onto form fields (`amountCents` → `amount`).
+- **UI kit additions:** `TextField` `leading` prefix + shared `fieldClasses()`; new `SelectField` (native `<select>` with a custom chevron).
+- **Dashboard:** draft cards now link to `/applications/new?draft=<id>` (continue the form).
+
+### Why
+- **Save at step 1:** the draft exists in the DB from the first "Save & continue". Refreshing, closing the tab or coming back days later loses nothing. That's why the API has a separate create-draft → edit → submit lifecycle.
+- **URL as the source of truth:** shareable/bookmarkable position, refresh-safe, back/forward work, and no hidden client state to get out of sync.
+- **Strings in the form, cents at the boundary:** users type "15,000"; the schema converts once with string maths (no `× 100` float errors) before anything reaches the API.
+- **Select for purpose with "Other":** most people pick from a list (fast, consistent data for reporting), and unusual purposes still fit.
+- **Defensive URL handling:** `?amount=99999999999` is ignored rather than pre-filling nonsense. The API would reject it anyway, but the UI shouldn't suggest it.
+- **Non-draft and not-found states:** the API already blocks edits after submit (409) and hides others' drafts (404). The UI explains those cases instead of showing a broken form.
+- **Native `<select>`:** best accessibility and the native picker on phones.
+
+### How to test
+Real browser, **21/21**:
+- **Validation:** step 1 is current in the stepper; empty submit → 3 field errors; `$1,500` → "minimum is $2,000"; `abc` → format error; "Other" needs a description; nothing saved while invalid; typed `$` dropped.
+- **Save:** → URL `?draft=<uuid>&step=employment`; **DB row `DRAFT|1500000|24|Solar panels`**; CREATED audit row.
+- **Edit:** Back restores saved values; editing → **same draft updated** (still 1 row), `2000000|Car purchase`.
+- **Resume:** refresh keeps step 2; dashboard "Continue application" reopens the draft.
+- **Pre-fill:** calculator link → `$12,500` + `17 months`; out-of-range URL values ignored.
+- **Blocked cases:** submitted draft → "already submitted"; another customer's draft → "Application not found".
+- **Layout:** no mobile overflow; no JS errors.
+
+### Interview points
+- *"How did you design the multi-step form?"* — The URL holds `draft` + `step`; each step saves to the server (POST then PATCH), so progress survives refreshes and Back works naturally. Steps are separate components with their own validation.
+- *"Where do you convert dollars to cents?"* — Once, in the form schema, using string parsing. The API only ever receives integer cents.
+- *"How do you handle users editing the URL?"* — Validate every query param (range checks), and rely on the API's ownership (404) and status (409) rules for anything that matters.
+
+---
+
+<!-- Next: 9.3b Step 2 employment & income -->

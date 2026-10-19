@@ -8,11 +8,22 @@ interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id
   hint?: ReactNode;
   // Rendered inside the input on the right (e.g. a show/hide button)
   trailing?: ReactNode;
+  // Short text inside the input on the left (e.g. "$" for money)
+  leading?: string;
+}
+
+// Shared look for inputs and selects (normal vs error state)
+export function fieldClasses(hasError: boolean): string {
+  return (
+    'block w-full rounded-xl border bg-surface px-3.5 py-2.5 text-sm text-ink shadow-sm transition ' +
+    'placeholder:text-subtle focus:outline-none focus:ring-4 ' +
+    (hasError ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100' : 'border-line focus:border-brand-500 focus:ring-brand-100')
+  );
 }
 
 // Label + input + hint/error, wired up for screen readers:
 // the label is linked via htmlFor, and hint/error via aria-describedby.
-export function TextField({ label, error, hint, trailing, className = '', ...inputProps }: TextFieldProps) {
+export function TextField({ label, error, hint, trailing, leading, className = '', ...inputProps }: TextFieldProps) {
   const id = useId();
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
 
@@ -22,18 +33,16 @@ export function TextField({ label, error, hint, trailing, className = '', ...inp
         {label}
       </label>
       <div className="relative">
+        {leading && (
+          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-sm font-medium text-muted" aria-hidden="true">
+            {leading}
+          </span>
+        )}
         <input
           id={id}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={
-            'block w-full rounded-xl border bg-surface px-3.5 py-2.5 text-sm text-ink shadow-sm transition ' +
-            'placeholder:text-subtle focus:outline-none focus:ring-4 ' +
-            (error
-              ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-100'
-              : 'border-line focus:border-brand-500 focus:ring-brand-100') +
-            (trailing ? ' pr-12' : '')
-          }
+          className={`${fieldClasses(Boolean(error))}${trailing ? ' pr-12' : ''}${leading ? ' pl-7' : ''}`}
           {...inputProps}
         />
         {trailing && <div className="absolute inset-y-0 right-0 flex items-center pr-2">{trailing}</div>}
