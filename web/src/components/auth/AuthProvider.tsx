@@ -35,6 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(null);
     setUser(null);
     setStatus('anonymous');
+    // FULL page load, not router navigation. Next 16 keeps recently visited
+    // pages mounted-but-hidden (React <Activity>), so their state — form
+    // drafts, loaded loan data — would otherwise survive logout and could be
+    // seen by the next person using this browser. A reload wipes all of it.
+    // (The pattern Next's "Preserving UI state" guide recommends for logout.)
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- a full reload is the point here
+    window.location.href = '/login';
   }, []);
 
   // Shared by login + register: both return { token, user }
@@ -69,7 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setAuthToken(token);
       try {
-        const me = await api.get<User>('/auth/me');
+        // skipUnauthorizedHandler: an expired token found at startup should be
+        // dropped quietly — not force a redirect from e.g. the public home page
+        const me = await api.get<User>('/auth/me', { skipUnauthorizedHandler: true });
         if (cancelled) return;
         setUser(me);
         setStatus('authenticated');

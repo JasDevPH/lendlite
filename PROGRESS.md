@@ -107,7 +107,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** `npm test` passes with all of the above.
 
-## Phase 8 — Frontend setup & auth (in progress)
+## Phase 8 — Frontend setup & auth ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -116,7 +116,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 3 | Auth context/store | Done | `lib/auth.ts` (guarded localStorage) + `AuthProvider`/`useAuth`: tri-state status (loading/authenticated/anonymous), login/register/logout, session restore via `/auth/me` (401 clears token, network error keeps it), central 401 → logout, cross-tab logout. Mounted in root layout. Build passes; runtime verified with 8.4 pages. |
 | 4 | Login/register pages | Done | UI primitives (`Button`, `TextField`/`PasswordField`, `Alert`, `Spinner`), Zod client validation, `AuthShell` split layout, `/login` (demo accounts, safe `?next=`, role redirect) + `/register` (live password checklist, EMAIL_TAKEN inline). Temporary `/dashboard` + `/admin` placeholders. Browser e2e (Edge + playwright-core): 19/19, no mobile overflow. |
 | 5 | Protected route guard | Done | `RequireAuth` (skeleton while loading, anonymous → `/login?next=`, wrong role → own home) applied via `app/(customer)/layout.tsx` (dashboard moved into group) and `app/admin/layout.tsx`. `PageSkeleton`. `typecheck` = `next typegen && tsc --noEmit`. Browser e2e: guard 8/8, auth 19/19. |
-| 6 | Layout/nav | Todo | |
+| 6 | Layout/nav | Done | `AppShell` (sticky `AppHeader` w/ role nav + `aria-current`, `UserMenu` dropdown, mobile menu, footer), `PageHeader`, `EmptyState`. Empty dashboard + admin placeholder. Full-reload logout + auth-form reset (Next 16 `<Activity>` keeps hidden pages' state). Fixed stale-token-on-public-page redirect (`skipUnauthorizedHandler`). Browser e2e: layout 15/15, guard 9/9, auth 19/19. |
 
 **Done when:** can register/login from the UI and see an empty dashboard.
 
@@ -128,7 +128,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 5 — Documents
 - [x] Phase 6 — Admin review
 - [x] Phase 7 — Backend tests
-- [ ] Phase 8 — Frontend setup & auth
+- [x] Phase 8 — Frontend setup & auth
 - [ ] Phase 9 — Customer UI
 - [ ] Phase 10 — Admin UI
 - [ ] Phase 11 — DevOps & polish

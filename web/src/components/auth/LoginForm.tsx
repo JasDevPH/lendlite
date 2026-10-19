@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { PasswordField, TextField } from '@/components/ui/TextField';
@@ -18,6 +18,22 @@ export function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const shouldReset = useRef(false);
+
+  // Next 16 keeps this page mounted-but-hidden after we navigate away. After a
+  // successful login, wipe the form (incl. the password) when it gets hidden,
+  // so going "back" shows a clean form. (Pattern from Next's
+  // "Preserving UI state" guide.)
+  useLayoutEffect(() => {
+    return () => {
+      if (!shouldReset.current) return;
+      shouldReset.current = false;
+      setValues({ email: '', password: '' });
+      setFieldErrors({});
+      setFormError(null);
+      setSubmitting(false);
+    };
+  }, []);
 
   // One place for "where to go once logged in": covers a fresh login AND
   // someone who opens /login while already signed in.
@@ -47,6 +63,7 @@ export function LoginForm() {
     setSubmitting(true);
     try {
       await login(parsed.data.email, parsed.data.password);
+      shouldReset.current = true;
       // Redirect happens in the effect above once status becomes 'authenticated'
     } catch (err) {
       if (err instanceof ApiError && err.code === 'VALIDATION_ERROR') setFieldErrors(err.fieldErrors());

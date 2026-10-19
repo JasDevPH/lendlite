@@ -51,10 +51,18 @@ interface RequestOptions {
   body?: unknown; // plain object → JSON; FormData → multipart (file upload)
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  // Don't trigger the global "401 → log out" handler (used when checking a
+  // stored token at startup: a stale token should be dropped quietly)
+  skipUnauthorizedHandler?: boolean;
+}
+
+export interface GetOptions {
+  signal?: AbortSignal;
+  skipUnauthorizedHandler?: boolean;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, signal } = options;
+  const { method = 'GET', body, headers = {}, signal, skipUnauthorizedHandler = false } = options;
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const finalHeaders: Record<string, string> = { Accept: 'application/json', ...headers };
@@ -80,7 +88,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const payload = (await response.json().catch(() => null)) as { data?: T; error?: ApiErrorBody } | null;
 
   if (!response.ok) {
-    if (response.status === 401 && authToken) onUnauthorized?.();
+    if (response.status === 401 && authToken && !skipUnauthorizedHandler) onUnauthorized?.();
     const error = payload?.error;
     throw new ApiError(
       response.status,
@@ -95,7 +103,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
-  get: <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal }),
+  get: <T>(path: string, options: GetOptions = {}) => request<T>(path, options),
   post: <T>(path: string, body?: unknown, headers?: Record<string, string>) =>
     request<T>(path, { method: 'POST', body, headers }),
   patch: <T>(path: string, body: unknown) => request<T>(path, { method: 'PATCH', body }),

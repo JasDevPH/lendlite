@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { Alert } from '@/components/ui/Alert';
 import { Button } from '@/components/ui/Button';
 import { PasswordField, TextField } from '@/components/ui/TextField';
@@ -20,6 +20,21 @@ export function RegisterForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [emailTaken, setEmailTaken] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const shouldReset = useRef(false);
+
+  // After a successful sign-up, clear the form (incl. password) when Next
+  // hides this page, so it isn't kept in the DOM. See LoginForm for details.
+  useLayoutEffect(() => {
+    return () => {
+      if (!shouldReset.current) return;
+      shouldReset.current = false;
+      setValues({ fullName: '', email: '', password: '' });
+      setFieldErrors({});
+      setFormError(null);
+      setEmailTaken(false);
+      setSubmitting(false);
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'authenticated' && user) router.replace(homeFor(user.role));
@@ -44,6 +59,7 @@ export function RegisterForm() {
     setSubmitting(true);
     try {
       await register(parsed.data);
+      shouldReset.current = true;
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_TAKEN') setEmailTaken(true);
       else if (err instanceof ApiError && err.code === 'VALIDATION_ERROR') setFieldErrors(err.fieldErrors());

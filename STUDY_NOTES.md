@@ -2101,4 +2101,53 @@ Regression: auth flow still **19/19**.
 
 ---
 
-<!-- Next: 8.6 layout/nav -->
+## 8.6 App layout + navigation (and Activity-safe logout)
+
+### What it does
+- **`components/layout/`:**
+  - `navigation.ts`: `NAV_ITEMS` per role (customer: *My applications*, *New application*; admin: *Review queue*), `isActive()`, `initials()`.
+  - `AppHeader`: sticky translucent header, logo → role home, desktop nav with **active pill + `aria-current="page"`**, mobile hamburger → slide-down panel (links, user, log out; Escape closes).
+  - `UserMenu`: initials avatar → dropdown (name, email, role badge, **Log out**). Closes on **outside click** and **Escape**; `aria-expanded` / `aria-controls`.
+  - `AppShell`: header + centred content column + footer. `PageHeader`: title / description / actions.
+- **`components/ui/EmptyState`:** icon, title, text, CTA. (The spec requires loading, empty *and* error states.)
+- **Layouts:** `(customer)/layout.tsx` and `admin/layout.tsx` = `RequireAuth` → `AppShell` → page.
+- **`/dashboard`:** "Welcome back, {first name}" + *New application* + an **empty state** (real list in Phase 9). **`/admin`:** "Review queue" placeholder (Phase 10). Temporary `SessionPlaceholder` deleted.
+- **Two fixes for Next 16's `<Activity>` behaviour:**
+  1. **Logout now does a full page load** (`window.location.href = '/login'`), clearing all client state from preserved pages.
+  2. **Login/register forms reset themselves after a successful submit** when hidden (`useLayoutEffect` cleanup + `shouldReset` ref), so the password isn't kept in a hidden DOM.
+- **Bug fix:** the startup `/auth/me` check uses `skipUnauthorizedHandler`, so a stale token on a public page is dropped quietly instead of forcing a redirect to `/login`.
+
+### Why
+- **One shell for every logged-in page:** consistent navigation, spacing and footer; pages only render their content.
+- **Nav driven by data (`NAV_ITEMS[role]`):** one list feeds desktop and mobile, so they can't drift. Role-specific menus come for free.
+- **Accessible menus:** `aria-expanded`, `aria-controls`, `aria-current`, Escape and outside-click closing are what keyboard and screen-reader users expect, and what tests can rely on.
+- **Next 16 Cache Components keep visited pages mounted-but-hidden (React `<Activity>`):** great for UX (drafts survive navigation), but **state survives logout too**. In e2e testing, a hidden register form still held the previous user's email (and would hold a password). Next's "Preserving UI state" guide recommends a full reload on logout. That's what we do, plus resetting auth forms after success.
+- **The lint rule `no-location-assign-relative-destination`** normally steers you to client navigation; here a full reload is intentional, so it's suppressed **with a written justification**, never silently.
+- **`skipUnauthorizedHandler`:** "token expired *during* a session" (log out) is different from "an old token found at startup" (forget it silently). Treating them the same bounced visitors off the public home page. Caught by a regression test.
+
+### How to test
+Real-browser suites (Edge + playwright-core), all passing:
+- **layout 15/15:**
+  - **Phase 8 done-when:** register in the UI → "Welcome back, Sam" + empty state.
+  - Nav links + `aria-current`; account menu shows name/email, closes on outside click and Escape; logout via menu.
+  - Admin nav shows only "Review queue".
+  - Mobile: hamburger instead of nav, **no overflow at 390 px**, menu opens/closes, logout.
+- **guard 9/9:** includes the new regression (stale token on `/` → cleared, stays on `/`).
+- **auth 19/19.**
+
+Screenshots reviewed: dashboard + menu (desktop), mobile menu, admin.
+
+### Interview points
+- *"What's special about navigation in Next 16?"* — With Cache Components, recently visited routes stay mounted via React `<Activity>`, which preserves state. Great for forms, but you must deliberately reset sensitive state, e.g. a full reload on logout and clearing auth forms.
+- *"How did you make the nav accessible?"* — Semantic `<nav aria-label>`, `aria-current` for the active page, `aria-expanded`/`aria-controls` on toggles, Escape/outside-click to close, visible focus.
+- *"Tell me about a bug you found through testing."* — A stale token on the public home page triggered the global 401 handler and kicked visitors to /login. I separated "validate stored token at startup" (fail silently) from "token expired mid-session" (log out), and added a regression test.
+
+---
+
+# ✅ Phase 8 complete
+
+Next.js 16 frontend foundation: fintech design tokens, typed API client with a single error type, auth provider (session restore, central 401 logout, cross-tab logout), validated login/register with a reusable UI kit, role-aware route guard, and an accessible app shell. Verified with 43 automated real-browser checks across desktop and mobile.
+
+---
+
+<!-- Next: Phase 9.1 calculator widget -->
