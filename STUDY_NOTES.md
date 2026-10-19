@@ -1012,4 +1012,51 @@ Verified with a throwaway script against Neon (test data deleted afterwards):
 
 ---
 
-<!-- Next: 4.6 applications controller + routes -->
+## 4.6 `applications.controller.ts` + `applications.routes.ts`
+
+### What it does
+Mounted at `/api/v1/applications`, with **`requireAuth` on the whole router**:
+
+| Method | Path | Roles | Chain | Success |
+|---|---|---|---|---|
+| POST | `/` | CUSTOMER | validate body → `create` | **201** |
+| GET | `/` | CUSTOMER | `listMine` | 200 |
+| GET | `/:id` | CUSTOMER, ADMIN | validate params → `getOne` | 200 (others' → 404) |
+| PATCH | `/:id` | CUSTOMER | validate params + body → `update` | 200 (non-draft → 409) |
+
+The controllers are ~2 lines each: pull `req.user`, `req.params.id`, `req.body` → call the service → `{ data }`.
+
+### Why
+- **`router.use(requireAuth)` once:** every route in the module is protected by default, so you can't forget it on a new route.
+- **Layered checks, each with its own status code:**
+  1. `requireAuth` → **401** (who are you?)
+  2. `requireRole` → **403** (is your *role* allowed on this route?)
+  3. `validate` → **400** (is the input well-formed?)
+  4. service → **404** (is it *yours*?) / **409** (is it in the right *state*?)
+- **Order inside the chain:** cheap checks first. Auth and role are rejected before parsing bodies or touching the DB.
+- **Admin can GET any application but not POST/PATCH/list:** admins review via `/admin/*` (Phase 6). The customer list is "*my* applications", which is meaningless for an admin.
+- **`req.params as { id: string }`:** with `noUncheckedIndexedAccess`, `req.params.id` is typed `string | undefined`. The `validate({ params })` middleware already guarantees it's a UUID, so the cast is safe.
+
+### How to test
+Verified end-to-end over HTTP (logged in as customer, a 2nd customer, and admin):
+
+| Request | Result |
+|---|---|
+| customer POST (+ `status:"APPROVED"`) | **201** DRAFT (status ignored) |
+| admin POST / no token POST / bad body | **403** / **401** / **400** |
+| customer GET list / other customer GET list | 200 with 1 app / 200 with 0 apps |
+| admin GET list | **403** |
+| owner GET :id / admin GET :id | 200 (documents [], schedule []) / 200 |
+| other customer GET :id | **404** |
+| GET `/applications/not-a-uuid` | **400** |
+| owner PATCH / other PATCH / PATCH `{}` | 200 / **404** / **400** |
+| owner PATCH after SUBMITTED | **409** `APPLICATION_NOT_EDITABLE` |
+
+### Interview points
+- *"Walk me through the checks on PATCH /applications/:id."* — Token (401) → role (403) → param + body shape (400) → ownership (404) → status is DRAFT (409) → atomic update → 200.
+- *"Why put requireAuth on the router rather than each route?"* — Secure by default: a newly added route can't accidentally be public.
+- *"Which status code when?"* — 400 malformed input, 401 not logged in, 403 wrong role, 404 not found / not yours, 409 conflicts with the current state.
+
+---
+
+<!-- Next: 4.7 submit with idempotency -->
