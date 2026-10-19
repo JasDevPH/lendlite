@@ -58,7 +58,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 |---|---|---|---|
 | 1 | `utils/money.ts` | Done | `Cents`/`BasisPoints` types, `isValidCents`, `roundToCents` (throws on NaN/∞), `bpsToDecimal`, `dollarsToCents`, `formatAUD` (en-AU). |
 | 2 | `utils/amortization.ts` | Done | Pure `calculateMonthlyPayment`, `generateSchedule`, `addMonths` (UTC, month-end clamp, no drift). 0% handled; last installment absorbs rounding → final balance 0. Spec example $888.49/mo ✓; 2,000 random loans pass all invariants. |
-| 3 | Calculator module | Todo | |
+| 3 | Calculator module | Done | Public `POST /calculator/quote`. Strict-integer Zod schema using shared `config/loanRules.ts` (`LOAN_LIMITS`). Service reuses `generateSchedule`. Spec example → 88849/mo, 66186 interest ✓. |
 | 4 | Applications schema | Todo | |
 | 5 | Applications service (create/list/get/update, ownership + status rules) | Todo | |
 | 6 | Applications controller/routes | Todo | |

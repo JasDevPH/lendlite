@@ -7,6 +7,7 @@ import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { authRouter } from './modules/auth/auth.routes';
+import { calculatorRouter } from './modules/calculator/calculator.routes';
 import { AppError } from './utils/AppError';
 
 // Builds the Express app WITHOUT calling listen(), so tests (Supertest)
@@ -61,6 +62,7 @@ api.get('/health', async (_req, res, next) => {
 });
 
 api.use('/auth', authRouter);
+api.use('/calculator', calculatorRouter);
 
 app.use('/api/v1', api);
 

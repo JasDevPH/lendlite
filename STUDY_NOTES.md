@@ -883,4 +883,45 @@ monthly payment: $888.49 | total interest: $661.86 | total paid: $10,661.86
 
 ---
 
-<!-- Next: 4.3 calculator module -->
+## 4.3 Calculator module — `POST /api/v1/calculator/quote`
+
+### What it does
+- **`config/loanRules.ts`** holds `LOAN_LIMITS`: amount $2,000–$50,000 (in cents), term 6–60 months, rate 500–2500 bps. It's the **single source** for every limit.
+- **`calculator.schema.ts`**: `quoteSchema` takes `{ amountCents, termMonths, annualRateBps }`, all **strict integers** within `LOAN_LIMITS`, with friendly messages.
+- **`calculator.service.ts`**: `getQuote()` calls the **same `generateSchedule`** used for real approvals and returns the inputs + `monthlyPaymentCents`, `totalInterestCents`, `totalPaymentCents`.
+- **`calculator.controller.ts`**: a sync handler that sends `{ data: quote }`.
+- **`calculator.routes.ts`**: `POST /quote` is **public** (no `requireAuth`), mounted at `/api/v1/calculator`.
+
+### Why
+- **Module structure (`schema → service → controller → routes`):** the same shape as `auth`. Every feature looks alike, so it's easy to navigate and explain.
+- **Shared `LOAN_LIMITS`:** if the business changes the max loan to $75k, it's one edit, and the calculator, application validation and approval can't drift apart.
+- **Reusing `generateSchedule` (not a separate formula):** the quote shown on the landing page always matches what the customer would really be charged at that rate. Total interest comes from the actual rounded schedule, not an approximation.
+- **Strict numbers, no coercion:** `"1000000"` (a string) is rejected. A string where a number belongs is a client bug, and guessing could hide it. Fractional cents (`1200.5`) are rejected too.
+- **No `asyncHandler`:** the handler is synchronous (no DB). Express 4 *does* catch synchronous throws by itself.
+- **POST for a read-only calculation:** the input is a structured JSON body; nothing is created. (GET with query params would also be valid. POST keeps typing simple and URLs clean.)
+- **Public endpoint:** CPU-cheap and DB-free, so low abuse risk. A global rate limiter would be a sensible production addition.
+
+### How to test
+```powershell
+# body.json: {"amountCents":1000000,"termMonths":12,"annualRateBps":1200}
+curl.exe -X POST -H "Content-Type: application/json" --data-binary "@body.json" http://localhost:4001/api/v1/calculator/quote
+```
+Verified:
+
+| Input | Result |
+|---|---|
+| $10k / 12% / 12m | **200** `monthlyPaymentCents: 88849`, `totalInterestCents: 66186` ✓ spec |
+| $50k / 25% / 60m | **200** `146757` / month, `3805380` interest |
+| `amountCents: 199999` | 400 "Minimum loan amount is $2,000" |
+| string amount, term 61, rate 1200.5 | 400 with 3 field errors |
+| `{}` | 400, all 3 fields Required |
+
+### Interview points
+- *"Why does the calculator reuse the schedule generator?"* — One source of truth: the quote and the real approved schedule can never disagree. Totals are computed from actual rounded installments.
+- *"Where do business limits live?"* — In one config module, imported by validation schemas and services, never as magic numbers scattered around.
+- *"Why reject `\"1000000\"` instead of converting it?"* — Be strict in what you accept for financial input. Silent coercion can hide client bugs, e.g. a dollars-vs-cents mix-up.
+- *"Is it OK for this endpoint to be public?"* — Yes. It reads no data and writes nothing. In production, add a general rate limit to protect CPU.
+
+---
+
+<!-- Next: 4.4 applications schema -->
