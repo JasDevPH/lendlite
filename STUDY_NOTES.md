@@ -1771,4 +1771,84 @@ npm test                         # whole suite: 44 passed
 
 ---
 
-<!-- Next: 7.4 application flow integration tests -->
+## 7.4 Application flow integration tests (`tests/applications.test.ts`, `tests/admin.test.ts`)
+
+### What it does
+**`applications.test.ts`** (customer side, 25 tests):
+- **Create/list/edit:**
+  - Create DRAFT (`status`/`annualRateBps`/`userId` ignored, CREATED audit).
+  - List only mine; edit a draft.
+  - Edit after submit → **409** `APPLICATION_NOT_EDITABLE`; admin on customer route → 403.
+- **Ownership:**
+  - Another customer's view/edit/submit → **404**, with a body **identical** to a non-existent id.
+  - Upload to / download from someone else's → 404.
+- **Submit:**
+  - Missing fields + documents → 400 with both lists; BANK_STATEMENT doesn't count.
+  - Income/expenses of 0 is valid; second submit without a key → **409** `INVALID_STATUS_TRANSITION`.
+- **Idempotency:**
+  - Same key → identical body + `Idempotent-Replayed` + one SUBMITTED audit.
+  - Key reused on another app → 409; **two simultaneous submits** → both 200, one audit; bad key → 400 naming `idempotency-key`.
+- **Documents:**
+  - Random storage name + exact bytes downloaded (`attachment`, `no-store`).
+  - `.txt` → 400, disguised `.exe` → 400, >5 MB → **413**, upload after submit → 409.
+  - **No file left on disk** after any rejection.
+
+**`admin.test.ts`** (admin side, 21 tests):
+- **Full lifecycle over HTTP:** create → patch → upload ID + PAYSLIP → submit → start review → approve at 12%.
+  - Spec numbers: 12 installments, $888.49, **final balance 0**, Σprincipal = $10,000.
+  - The customer sees the schedule.
+  - The audit trail is `CREATED → DOCUMENT_UPLOADED ×2 → SUBMITTED → REVIEW_STARTED → APPROVED` with the correct actors.
+- **6 invalid transitions → 409** (`it.each`).
+- **Approve:**
+  - Rate validation.
+  - **Atomicity:** a planted conflicting installment makes step 2 fail → status/rate/decidedAt rolled back, no audit.
+  - **Race:** 2 simultaneous approvals → `[200, 409]`, 24 rows (not 48).
+- **Reject:** reason ≥10 chars after trimming; customer sees the reason.
+- **List/stats:**
+  - Drafts hidden, status+amount filters, pagination metadata.
+  - Stats match exactly (counts incl. zeros, $35,000 approved), `?since` filter, 403 for customers.
+
+New helpers:
+- `createApplication(user, { status, amountCents, termMonths, createdAt })` inserts a complete application in any status.
+- `PDF_BYTES` / `EXE_BYTES` provide real magic bytes.
+- `tests/helpers/uploads.ts` has `clearUploads()` / `countUploadedFiles()`.
+
+### Why
+- **Covers every Phase 7 requirement:** invalid transitions, ownership 404, idempotency, plus the money-critical behaviour (atomic approval, final balance 0).
+- **Start tests mid-flow with factories:** "approve an UNDER_REVIEW application" doesn't need 6 HTTP calls of setup. Only the lifecycle test walks the whole path; every other test is focused and fast.
+- **Concurrency tested with `Promise.all`:** race conditions are the bugs that slip past manual testing. These tests prove the conditional-update design.
+- **Atomicity tested by forcing a failure:** the only way to *prove* a transaction rolls back is to make it fail halfway.
+- **Disk state asserted (`countUploadedFiles() === 0`):** "rejected uploads are cleaned up" is invisible in the HTTP response, so the test checks the filesystem.
+- **A bug in the *test* was caught:** `approve(id, undefined)` silently used the helper's default parameter (`= 1200`), so the "missing rate" case sent a valid rate. A failing test isn't always an app bug. Read *why* it failed. Fixed by sending `{}` explicitly.
+- **Run time (~80 s):** mostly bcrypt (cost 12, deliberately slow) creating 2 users before every test, plus DB round-trips. An option if it grows: make the bcrypt cost configurable and use 4 in tests.
+
+### How to test
+```powershell
+docker compose up -d db
+cd api
+npm test        # → Test Suites: 6 passed | Tests: 84 passed
+```
+
+| Suite | Tests |
+|---|---|
+| `health.test.ts` | 2 |
+| `unit/amortization.test.ts` | 20 |
+| `unit/money.test.ts` | 6 |
+| `auth.test.ts` | 16 |
+| `applications.test.ts` | 25 |
+| `admin.test.ts` | 15 (+ 6 parameterised transitions) |
+
+### Interview points
+- *"What do your tests cover?"* — Unit tests for the money maths; integration tests for every endpoint's happy path and failure modes; security properties (ownership 404s, no enumeration, mass assignment, file validation); and concurrency/atomicity (simultaneous submits/approvals, forced transaction failure).
+- *"How do you test race conditions?"* — Fire identical requests concurrently with `Promise.all` and assert on the *final state* (one audit row, no duplicate schedule), not just the status codes.
+- *"How would you speed up the suite?"* — Lower bcrypt cost in tests, parallelise with one database or schema per Jest worker, and keep most tests at the service/unit level.
+
+---
+
+# ✅ Phase 7 complete
+
+84 automated tests (6 suites) against a real, isolated Postgres: amortization + money unit tests (incl. a seeded property test), and integration tests for auth, the application flow, documents, idempotency, ownership, admin review, atomic approval, races, audit trail and raw-SQL stats. Stable across repeated runs.
+
+---
+
+<!-- Next: Phase 8.1 Next.js + Tailwind init -->
