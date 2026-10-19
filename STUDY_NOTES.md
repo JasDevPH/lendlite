@@ -166,7 +166,8 @@ You'll test it for real against `/health` and unknown routes once `app.ts` exist
   3. Finds the `lendlite` project, or creates it: **Sydney (`aws-ap-southeast-2`), Postgres 16**, database + role `lendlite`.
   4. Gets the **direct** (non-pooled) connection string and writes `DATABASE_URL` to `.env`. The password is masked in the output.
   - **Idempotent:** re-running reuses the existing project instead of creating a duplicate.
-- **`scripts/tsconfig.json`** means `npm run typecheck` checks these scripts too. They run with `tsx` and are never compiled into `dist/`.
+- **`scripts/tsconfig.json`** lets `npm run typecheck:scripts` check these scripts. They run with `tsx` and are never compiled into `dist/`.
+- **`api/scripts/` is gitignored** (local-only helpers). That's why the main `typecheck` doesn't include them: on a fresh clone or in CI the folder doesn't exist.
 
 ### Why
 - **`crypto.randomBytes`, not `Math.random`.** `Math.random` is predictable and not meant for security. `randomBytes` uses the OS's cryptographically secure generator.

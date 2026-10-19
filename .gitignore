@@ -8,6 +8,9 @@ coverage/
 .env.*
 !.env.example
 
+# Local dev helper scripts (JWT secret generator, Neon setup) — kept out of the repo
+api/scripts/
+
 # Uploaded files (dev storage)
 uploads/
 
