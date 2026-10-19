@@ -67,4 +67,43 @@ npx tsx -e "import { env } from './src/config/env'; console.log(env)"   # prints
 
 ---
 
-<!-- Next: 1.3 lib/logger.ts -->
+## 1.3 `src/lib/logger.ts`
+
+### What it does
+Exports one shared **pino** logger for the whole API. Its behaviour depends on `NODE_ENV`:
+
+| NODE_ENV | Level | Output |
+|---|---|---|
+| development | `debug` | Coloured, human-readable (via `pino-pretty`) |
+| production | `info` | One JSON object per line |
+| test | `silent` | Nothing (keeps Jest output clean) |
+
+It also **redacts** sensitive fields (`authorization` header, `password`, `passwordHash`, `token`), replacing them with `[REDACTED]`.
+
+Usage: `logger.info({ applicationId }, 'Application submitted')`. Put the data object first and the message second.
+
+### Why
+- **Structured JSON logs in production:** log platforms (CloudWatch, Datadog, ELK) can filter by field, e.g. "all errors for applicationId X". Plain `console.log` strings can't do that.
+- **pino over winston/console:** it's very fast (async, low overhead) and JSON by default.
+- **Redaction:** in fintech, leaking passwords or tokens into logs is a security and compliance incident. Redaction protects you even if someone accidentally logs a whole request body.
+- **Log levels:** `debug` noise is useful in dev but hidden in production. `silent` in tests stops log spam from drowning out test results.
+- **pino-pretty is a devDependency only** and only loaded in development, so production stays lean.
+
+### How to test
+```powershell
+cd api
+npx tsx -e "import { logger } from './src/lib/logger'; logger.info({ user: { password: 'x' } }, 'login attempt')"
+# dev → coloured line, password: "[REDACTED]"
+$env:NODE_ENV='production'   # → {"level":30,...,"user":{"password":"[REDACTED]"},"msg":"login attempt"}
+$env:NODE_ENV='test'         # → prints nothing
+Remove-Item Env:NODE_ENV     # reset afterwards
+```
+
+### Interview points
+- *"Why structured logging?"* — Logs become queryable data. In an incident you can filter by `applicationId` or `userId` across thousands of lines.
+- *"How do you avoid logging sensitive data?"* — Redaction at the logger level, as a safety net. Also: never log whole request bodies on auth routes.
+- *"Why different log levels per environment?"* — Signal vs noise. Debug detail helps locally but costs money and hides real problems in production.
+
+---
+
+<!-- Next: 1.4 utils/AppError.ts + middleware/errorHandler.ts -->
