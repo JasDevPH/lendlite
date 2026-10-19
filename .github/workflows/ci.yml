@@ -1,0 +1,135 @@
+# Runs on every push and pull request. Railway is set to "Wait for CI", so a
+# push to main only deploys after every job here has passed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the older, now-pointless run
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the code
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API — typecheck, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    # Throwaway Postgres for the integration tests (same major version as prod)
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: lendlite
+          POSTGRES_PASSWORD: lendlite
+          POSTGRES_DB: lendlite_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U lendlite -d lendlite_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # Read by tests/setup (the name must end in _test or the tests refuse to run)
+      TEST_DATABASE_URL: postgresql://lendlite:lendlite@localhost:5432/lendlite_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      # ci = exact versions from the lockfile (fails if it's out of sync)
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # Known vulnerabilities in packages that ship to production
+      - run: npm audit --omit=dev --audit-level=high
+
+  web:
+    name: Web — lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  # The "works from a fresh clone" check: build both images and run the whole
+  # stack exactly as a new developer would, then smoke-test it end to end
+  compose:
+    name: Docker Compose — fresh-clone smoke test
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build and start the stack
+        run: docker compose up --build -d
+
+      - name: Wait for the API to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4001/api/v1/health && exit 0
+            sleep 2
+          done
+          echo "API never became healthy"; exit 1
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          API=http://localhost:4001/api/v1
+
+          # Seed job ran and exited cleanly
+          test "$(docker compose ps -a seed --format '{{.ExitCode}}')" = "0"
+
+          # Database is reachable from the API
+          curl -sf $API/health | jq -e '.data.database == "ok"'
+
+          # Seeded demo users can log in
+          login() { curl -sf -X POST $API/auth/login -H 'Content-Type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}"; }
+          login admin@lendlite.dev Admin1234 | jq -e '.data.user.role == "ADMIN"'
+          TOKEN=$(login customer@lendlite.dev Customer1234 | jq -r '.data.token')
+
+          # Upload a document, restart the API, and download the same bytes (uploads volume)
+          APP=$(curl -sf -X POST $API/applications -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"amountCents":500000,"termMonths":12,"purpose":"CI smoke test"}' | jq -r '.data.id')
+          { printf '%%PDF-1.7\n'; head -c 500 /dev/urandom; } > /tmp/id.pdf
+          DOC=$(curl -sf -X POST $API/applications/$APP/documents -H "Authorization: Bearer $TOKEN" \
+            -F type=ID -F 'file=@/tmp/id.pdf;type=application/pdf' | jq -r '.data.id')
+          docker compose restart api
+          for i in $(seq 1 30); do curl -sf $API/health >/dev/null && break; sleep 2; done
+          curl -sf $API/documents/$DOC/download -H "Authorization: Bearer $TOKEN" -o /tmp/downloaded.pdf
+          cmp /tmp/id.pdf /tmp/downloaded.pdf
+
+          # Web app is up and server-renders the landing page
+          # (saved to a file first: `curl | grep -q` can fail under pipefail when grep exits early)
+          curl -sf http://localhost:3000/ -o /tmp/home.html
+          grep -q 'LendLite' /tmp/home.html
+          echo "All smoke checks passed"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
