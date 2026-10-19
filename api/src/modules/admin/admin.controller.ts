@@ -8,3 +8,10 @@ export const listApplications = asyncHandler(async (req, res) => {
   const result = await adminService.listApplications(req.query as unknown as ListApplicationsQuery);
   res.json({ data: result });
 });
+
+// POST /admin/applications/:id/start-review
+export const startReview = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const application = await adminService.startReview(id, req.user!);
+  res.json({ data: application });
+});

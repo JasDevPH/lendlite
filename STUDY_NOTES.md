@@ -1384,4 +1384,44 @@ Verified with 7 test applications (1 DRAFT + 6 others):
 
 ---
 
-<!-- Next: 6.2 start-review -->
+## 6.2 Start review — `POST /admin/applications/:id/start-review`
+
+### What it does
+- **Shared helpers** in `admin.service.ts` (approve and reject reuse them):
+  - `loadForTransition(id, to)`: load the application → 404 if missing → `assertTransition(current, to)` → 409 if not allowed.
+  - `rethrowIfConcurrentChange(err, id, to)`: if the conditional update hit **P2025** (someone changed the status meanwhile), re-read the status and throw the proper 409.
+- **`startReview(id, admin)`**:
+  1. `loadForTransition(id, UNDER_REVIEW)`: only SUBMITTED may move here.
+  2. Transaction: `update where { id, status: <checked status> }` → UNDER_REVIEW, plus a `REVIEW_STARTED` audit row (`fromStatus` SUBMITTED, `toStatus` UNDER_REVIEW, actor = admin).
+  3. On P2025 → 409.
+- **Route:** `POST /admin/applications/:id/start-review` (admin-only via the router guard; UUID-validated `:id`). Returns 200 + the updated application.
+
+### Why
+- **The status machine decides, not the endpoint:** `assertTransition` is the same function customer submit uses. All allowed moves are in one table, so admin endpoints can't invent new transitions.
+- **Why an explicit "start review" step at all?** It signals to the customer (and other admins) that someone owns the application now, and the audit trail records *who* picked it up and *when*. That's important for accountability and SLAs.
+- **Admins get 404 (not 403) for a missing ID:** they're allowed to see every application, so 404 here genuinely means "doesn't exist".
+- **Race between two admins:** both may load SUBMITTED. Only one conditional update matches; the other gets P2025 → 409 "Cannot move from UNDER_REVIEW…". Verified: 200 + 409, exactly 1 audit row.
+- **Helpers extracted now:** approve/reject have the same load → check → conditional update → audit → race-handling shape. Writing it once avoids three subtly different copies.
+
+### How to test
+```powershell
+curl.exe -X POST -H "Authorization: Bearer $adminToken" http://localhost:4001/api/v1/admin/applications/<id>/start-review
+```
+Verified:
+
+| Case | Result |
+|---|---|
+| SUBMITTED | **200** UNDER_REVIEW, audit REVIEW_STARTED SUBMITTED→UNDER_REVIEW by admin |
+| already UNDER_REVIEW / DRAFT / APPROVED | **409** `INVALID_STATUS_TRANSITION` |
+| unknown id / malformed id | **404** / **400** |
+| customer token | **403** |
+| 2 admins at once | **200 + 409**, 1 audit row |
+
+### Interview points
+- *"What stops two admins from processing the same application?"* — A conditional update (`WHERE status = 'SUBMITTED'`): the DB lets exactly one succeed, and the other gets a 409 showing the real current status.
+- *"How do you keep status rules consistent between customer and admin endpoints?"* — Both call the same `assertTransition` backed by one transitions table.
+- *"Why record who started the review?"* — Accountability and compliance: lenders must be able to show who handled each application and when.
+
+---
+
+<!-- Next: 6.3 approve (transaction + schedule) -->

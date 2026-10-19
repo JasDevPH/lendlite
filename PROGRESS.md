@@ -84,7 +84,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | Admin list with filters + pagination | Done | `GET /admin/applications` — router-wide `requireAuth + requireRole(ADMIN)`. Query (coerced): `status`, `minAmount`/`maxAmount` (cents, min ≤ max), `page`, `pageSize` (≤100). DRAFTs hidden unless requested. Count + page in one tx, stable sort (createdAt desc, id). Includes applicant + document count. |
-| 2 | start-review | Todo | |
+| 2 | start-review | Done | `POST /admin/applications/:id/start-review`: SUBMITTED → UNDER_REVIEW via `assertTransition`; tx update + `REVIEW_STARTED` audit. Shared helpers `loadForTransition` / `rethrowIfConcurrentChange` (P2025 → 409). Race of 2 admins → 200 + 409, 1 audit row. |
 | 3 | approve (transaction + schedule) | Todo | |
 | 4 | reject | Todo | |
 | 5 | Audit trail endpoint | Todo | |
