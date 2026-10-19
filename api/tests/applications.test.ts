@@ -218,6 +218,29 @@ describe('idempotent submit', () => {
     expect(await prisma.auditLog.count({ where: { applicationId: draft.id, action: 'SUBMITTED' } })).toBe(1);
   });
 
+  // Deterministic version of the race above (it failed intermittently in CI):
+  // request B reads the application while it's still a DRAFT, then request A
+  // commits the submit with the same key before B checks who owns the key.
+  it('replays (not 409) when a same-key submit commits between our read and the key check', async () => {
+    const draft = await readyDraft(customer);
+    const key = randomUUID();
+    const staleDraft = await prisma.loanApplication.findUniqueOrThrow({ where: { id: draft.id } });
+    await submit(customer, draft.id, key).expect(200); // request A wins
+
+    // Request B: its initial read returns the pre-submit snapshot
+    const spy = jest.spyOn(prisma.loanApplication, 'findFirst').mockResolvedValueOnce(staleDraft);
+    try {
+      const res = await submit(customer, draft.id, key);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['idempotent-replayed']).toBe('true');
+      expect(res.body.data.status).toBe('SUBMITTED');
+      expect(await prisma.auditLog.count({ where: { applicationId: draft.id, action: 'SUBMITTED' } })).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('rejects a malformed key with 400', async () => {
     const draft = await readyDraft(customer);
 
