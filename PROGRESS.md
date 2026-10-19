@@ -33,7 +33,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | `prisma/schema.prisma` | Done | Prisma **6.19** (stable; 8 is RC, 7 needs adapter/config). 3 enums, 5 models per spec + FK indexes on `Document.applicationId` and `AuditLog(applicationId, createdAt)`. `overrides: deepmerge-ts ^8` fixes a CLI-only vuln → `npm audit` 0. Validated + client generated. |
-| 2 | First migration | Todo | |
+| 2 | First migration | Done | `20261019042311_init` applied to **Neon** (`migrate dev`) and **Docker** (`migrate deploy`); both in sync. Scripts: `db:migrate`, `db:deploy`, `db:studio`. |
 | 3 | `lib/prisma.ts` | Todo | |
 | 4 | `prisma/seed.ts` | Todo | |
 

@@ -351,4 +351,51 @@ npm audit              # → found 0 vulnerabilities
 
 ---
 
-<!-- Next: 2.2 first migration -->
+## 2.2 First migration (`prisma/migrations/…_init/`)
+
+### What it does
+`npx prisma migrate dev --name init` compared the schema with the (empty) database and:
+1. **Generated SQL** in `prisma/migrations/20261019042311_init/migration.sql`:
+   - `CREATE TYPE` for the 3 enums and `CREATE TABLE` for the 5 tables.
+   - Unique indexes (email, idempotencyKey, applicationId+installmentNo) and our regular indexes.
+   - Foreign keys: `ON DELETE RESTRICT` for User→LoanApplication, `CASCADE` for the children.
+2. **Applied it** to Neon, recording it in a `_prisma_migrations` table.
+3. **Regenerated the Prisma Client.**
+
+Also created `migration_lock.toml` (locks the provider to postgresql) and these npm scripts:
+
+| Script | Command | When |
+|---|---|---|
+| `npm run db:migrate` | `prisma migrate dev` | Dev: after changing the schema. Creates + applies a new migration |
+| `npm run db:deploy` | `prisma migrate deploy` | CI / production / a fresh DB: applies existing migrations only, never generates |
+| `npm run db:studio` | `prisma studio` | Browse/edit data in a web UI |
+
+The same migration was applied to the **Docker** DB with `migrate deploy`, so both databases are identical.
+
+### Why
+- **Migrations are versioned SQL committed to git.** Every environment (your laptop, CI, production) reaches the exact same schema by replaying the same files in order. No "works on my DB".
+- **`migrate dev` vs `migrate deploy`:** `dev` can create new migrations and may offer to reset the DB, so it's for development only. `deploy` only applies already-reviewed migrations, safe for production and CI.
+- **Always read the generated SQL.** It's what actually runs against the DB. Ours shows exactly the constraints and indexes we designed.
+- **`_prisma_migrations` table:** Prisma records which migrations ran (with checksums), so it never applies one twice and detects if an applied file was edited.
+- **Never edit an applied migration.** Change the schema and create a new migration instead.
+- **Shadow database:** `migrate dev` briefly creates a temporary DB to check for drift. Neon's role is allowed to do that, which is why it just worked.
+- Tables are named like the models (`"LoanApplication"`, camelCase columns), so raw SQL must quote them: `SELECT "amountCents" FROM "LoanApplication"`. That matters for the stats query in Phase 6.
+
+### How to test
+```powershell
+cd api
+npx prisma migrate status     # → "1 migration found… Database schema is up to date!"
+npm run db:studio             # opens http://localhost:5555, shows 5 empty tables
+# Docker DB:
+docker exec lendlite-db psql -U lendlite -d lendlite -c "\dt"
+```
+
+### Interview points
+- *"How do you change a production database schema safely?"* — Versioned migrations in git, reviewed like code, applied by CI/CD with `migrate deploy`. For risky changes use expand/contract: add the new column, backfill, switch code, then remove the old column later.
+- *"What's the difference between `migrate dev` and `migrate deploy`?"* — `dev` generates migrations and can reset (development only); `deploy` only applies committed migrations (CI/production).
+- *"What happens if two developers create migrations at the same time?"* — Both are timestamped files; git merges them, and Prisma detects drift or ordering issues. You may need to regenerate one on top of the other.
+- *"Why commit migration files instead of just the schema?"* — The schema says what the DB should look like *now*; migrations say *how to get there* from every past state, including data-safe steps.
+
+---
+
+<!-- Next: 2.3 lib/prisma.ts -->

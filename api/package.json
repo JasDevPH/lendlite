@@ -13,6 +13,9 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "typecheck:scripts": "tsc -p scripts",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
     "secret:jwt": "tsx scripts/generate-jwt-secret.ts",
     "db:neon": "tsx scripts/setup-neon.ts"
   },
