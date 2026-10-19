@@ -115,7 +115,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 2 | `lib/api.ts` (typed fetch wrapper) | Done | `ApiError` (+ `fieldErrors()`), `request<T>` unwraps `{data}`, JSON/FormData, Bearer token (in memory), central 401 handler, network error mapping, `download` → Blob. Plus `lib/types.ts` (API shapes) and `lib/format.ts` (en-AU money/rate/date, safe dollar parsing). Verified against live API. |
 | 3 | Auth context/store | Done | `lib/auth.ts` (guarded localStorage) + `AuthProvider`/`useAuth`: tri-state status (loading/authenticated/anonymous), login/register/logout, session restore via `/auth/me` (401 clears token, network error keeps it), central 401 → logout, cross-tab logout. Mounted in root layout. Build passes; runtime verified with 8.4 pages. |
 | 4 | Login/register pages | Done | UI primitives (`Button`, `TextField`/`PasswordField`, `Alert`, `Spinner`), Zod client validation, `AuthShell` split layout, `/login` (demo accounts, safe `?next=`, role redirect) + `/register` (live password checklist, EMAIL_TAKEN inline). Temporary `/dashboard` + `/admin` placeholders. Browser e2e (Edge + playwright-core): 19/19, no mobile overflow. |
-| 5 | Protected route guard | Todo | |
+| 5 | Protected route guard | Done | `RequireAuth` (skeleton while loading, anonymous → `/login?next=`, wrong role → own home) applied via `app/(customer)/layout.tsx` (dashboard moved into group) and `app/admin/layout.tsx`. `PageSkeleton`. `typecheck` = `next typegen && tsc --noEmit`. Browser e2e: guard 8/8, auth 19/19. |
 | 6 | Layout/nav | Todo | |
 
 **Done when:** can register/login from the UI and see an empty dashboard.

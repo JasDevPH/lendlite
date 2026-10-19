@@ -2053,4 +2053,52 @@ Automated in a real browser (Microsoft Edge via `playwright-core`, API on the lo
 
 ---
 
-<!-- Next: 8.5 protected route guard -->
+## 8.5 Protected route guard (`RequireAuth` + route-group layouts)
+
+### What it does
+- **`components/auth/RequireAuth.tsx`** (`<RequireAuth role="CUSTOMER" | "ADMIN">`):
+  - `loading` → render a **`PageSkeleton`** (never the protected content).
+  - `anonymous` → `router.replace('/login?next=<current path + query>')`.
+  - Logged in with the **wrong role** → `router.replace(homeFor(user.role))` (customer → `/dashboard`, admin → `/admin`).
+  - Right role → render the page.
+- **Applied once per area via layouts:**
+  - `app/(customer)/layout.tsx` wraps every customer page. `/dashboard` moved into the `(customer)` route group (URL unchanged); `/applications/...` will live there too.
+  - `app/admin/layout.tsx` wraps every `/admin/...` page.
+- **`PageSkeleton`:** a neutral pulsing placeholder (`aria-busy`).
+- `SessionPlaceholder` simplified (the guard now guarantees a user).
+- **`typecheck` script** is now `next typegen && tsc --noEmit`.
+
+### Why
+- **Why client-side (not Next's `proxy`/middleware)?** The JWT is in `localStorage`, which the server never sees, so server-side code can't know who's logged in. With an httpOnly cookie, `proxy` could redirect *before* any HTML is sent. That's another point in favour of cookies.
+- **The guard is UX, not security.** Anyone can edit browser JS or call the API directly. Real protection = the API: 401 without a valid token, 403 for the wrong role, 404 for others' data. The guard just avoids showing pages a user can't use.
+- **Layouts as the enforcement point:** "secure by default" again. Any new page added under `(customer)` or `admin` is automatically guarded (like `router.use(requireAuth)` on the API).
+- **Route groups `( )`:** organise pages by audience without changing URLs.
+- **Skeleton while deciding:** prevents both the "flash of protected content" and a jarring blank page. Verified with a `MutationObserver` that the welcome text never appeared for a logged-out visitor.
+- **`?next=` round trip (including query strings):** a user who opens a deep link, logs in, and lands back on that exact page has a smooth experience. `safeNextPath` (8.4) keeps it from becoming an open redirect.
+- **Wrong role → own home, not an error page:** friendlier, and doesn't confirm what exists in the other area.
+- **`next typegen`:** Next 16 generates typed route helpers (`LayoutProps<'/admin'>`) into `.next/types`. Plain `tsc` used **stale** types after moving `/dashboard` and adding `/admin/layout.tsx`, giving false errors. Generating them first (as the Next docs recommend) makes `typecheck` reliable, including in CI.
+
+### How to test
+Real-browser checks (Edge + playwright-core), **guard: 8/8**:
+- **Logged out:** `/dashboard` → `/login?next=%2Fdashboard`, with **no flash** of protected content.
+- **Login** → sent back to `/dashboard`.
+- **Customer → `/admin`** → bounced to `/dashboard`.
+- **Logged out:** `/admin?tab=stats` → login as admin → back to `/admin?tab=stats`.
+- **Admin → `/dashboard`** → bounced to `/admin`.
+- **Tampered token** on a protected page → login.
+- No uncaught JS errors.
+
+Regression: auth flow still **19/19**.
+
+*Test gotchas (both test issues, not app bugs):*
+1. An "already on `/login`" wait returned immediately, so the test now waits for the token to actually be cleared.
+2. Running both suites back-to-back exceeded the **5 logins/min rate limit**: the app behaving correctly. Restarting the API resets the in-memory counters.
+
+### Interview points
+- *"How do you protect routes in the frontend?"* — A role-aware guard component in each area's layout, with a loading skeleton and `?next=` redirect. And I'd stress that it's UX: authorisation is enforced by the API.
+- *"Why not use Next.js middleware/proxy?"* — The token is in localStorage, invisible to the server. With httpOnly cookies, `proxy` could do the redirect server-side before rendering.
+- *"What's a flash of unauthenticated content and how do you prevent it?"* — Briefly rendering protected UI before auth is known. Use a tri-state status and render a skeleton until it resolves.
+
+---
+
+<!-- Next: 8.6 layout/nav -->
