@@ -110,6 +110,36 @@ export async function approve(id: string, admin: AuthUser, annualRateBps: number
   }
 }
 
+// UNDER_REVIEW → REJECTED, with a mandatory reason (shown to the customer)
+export async function reject(id: string, admin: AuthUser, reason: string) {
+  const application = await loadForTransition(id, ApplicationStatus.REJECTED);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.loanApplication.update({
+        where: { id, status: application.status },
+        data: {
+          status: ApplicationStatus.REJECTED,
+          rejectionReason: reason,
+          decidedAt: new Date(),
+          decidedById: admin.id,
+        },
+      });
+      await recordAudit(tx, {
+        applicationId: id,
+        actorId: admin.id,
+        action: 'REJECTED',
+        fromStatus: application.status,
+        toStatus: ApplicationStatus.REJECTED,
+        metadata: { reason },
+      });
+      return updated;
+    });
+  } catch (err) {
+    return rethrowIfConcurrentChange(err, id, ApplicationStatus.REJECTED);
+  }
+}
+
 // ---------- Queries ----------
 
 export interface Pagination {

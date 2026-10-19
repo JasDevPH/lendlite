@@ -1479,4 +1479,44 @@ RACE: 2 approvals at once → 200 + 409, 24 rows (not 48)
 
 ---
 
-<!-- Next: 6.4 reject -->
+## 6.4 Reject — `POST /admin/applications/:id/reject`
+
+### What it does
+- **Body:** `rejectBodySchema` → `{ reason }`, **trimmed**, then 10–1000 chars.
+- **`reject(id, admin, reason)`**:
+  1. `loadForTransition(id, REJECTED)`: only UNDER_REVIEW may be rejected.
+  2. Transaction: conditional update → REJECTED + `rejectionReason`, `decidedAt`, `decidedById`; plus a `REJECTED` audit row with `metadata: { reason }`.
+  3. P2025 → 409.
+- The customer sees `status: REJECTED` and the `rejectionReason` on their application detail.
+
+### Why
+- **Mandatory, meaningful reason (spec: ≥10 chars):** customers deserve to know why. In lending it also supports fairness/complaints processes (Australian lenders must handle disputes, and "why was I declined" is the first question). Trimming first means 12 spaces doesn't count as a reason.
+- **Max length:** prevents someone pasting megabytes into a text column.
+- **Final states:** APPROVED and REJECTED have **no outgoing transitions** in the status table, so a decision can't be silently flipped. Changing a decision would need a new, audited process.
+- **Reason stored twice (column + audit metadata):** the column is the *current* state shown to the customer; the audit row is the immutable *history*.
+- **Approve-vs-reject race:** both conditional updates require `status = UNDER_REVIEW`, so exactly one can win. Verified: the result is a consistent APPROVED (schedule present, no rejection reason) with a single decision audit, never a mix of both.
+- **Reuse of the shared helpers:** the whole action is ~25 lines because load/check/race-handling were written once in 6.2.
+
+### How to test
+```
+POST /api/v1/admin/applications/<id>/reject   {"reason":"Income does not cover monthly repayments"}
+```
+Verified:
+
+| Case | Result |
+|---|---|
+| `"Too short"` / 12 spaces / missing | **400** |
+| valid (padded) reason | **200** REJECTED, reason trimmed, `decidedAt`/`decidedById` set, audit UNDER_REVIEW→REJECTED with reason |
+| customer GET detail | sees REJECTED + reason |
+| reject again / approve a REJECTED / reject an APPROVED / reject a SUBMITTED | **409** `INVALID_STATUS_TRANSITION` |
+| customer token | **403** |
+| approve + reject at the same instant | **200 + 409**, consistent final state, 1 decision audit |
+
+### Interview points
+- *"Can an admin change a decision?"* — Not through the API. APPROVED/REJECTED are final in the status machine. A real system would add an explicit, audited "reopen" or "withdraw" transition rather than allowing edits.
+- *"What happens if one admin approves while another rejects?"* — Both updates are conditional on `UNDER_REVIEW`; the database serialises them, one wins, and the other gets a 409 showing the real status. The data is never half-approved, half-rejected.
+- *"Why require a rejection reason?"* — Transparency for the customer, consistency for reviewers, and evidence for complaints or regulators.
+
+---
+
+<!-- Next: 6.5 audit trail endpoint -->

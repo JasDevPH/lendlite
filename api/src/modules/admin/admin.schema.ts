@@ -28,3 +28,15 @@ export const approveBodySchema = z.object({
 });
 
 export type ApproveInput = z.infer<typeof approveBodySchema>;
+
+// Spec: REJECTED requires a reason of at least 10 characters.
+// Trimmed first, so "          " (10 spaces) doesn't count as a reason.
+export const rejectBodySchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(10, 'Rejection reason must be at least 10 characters')
+    .max(1000, 'Rejection reason must be at most 1000 characters'),
+});
+
+export type RejectInput = z.infer<typeof rejectBodySchema>;

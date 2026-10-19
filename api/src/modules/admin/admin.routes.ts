@@ -5,7 +5,7 @@ import { requireRole } from '../../middleware/requireRole';
 import { validate } from '../../middleware/validate';
 import { applicationIdParamsSchema } from '../applications/applications.schema';
 import * as adminController from './admin.controller';
-import { approveBodySchema, listApplicationsQuerySchema } from './admin.schema';
+import { approveBodySchema, listApplicationsQuerySchema, rejectBodySchema } from './admin.schema';
 
 // Mounted at /api/v1/admin. EVERY route here is admin-only, set once for the router.
 export const adminRouter = Router();
@@ -16,3 +16,4 @@ const idParams = validate({ params: applicationIdParamsSchema });
 adminRouter.get('/applications', validate({ query: listApplicationsQuerySchema }), adminController.listApplications);
 adminRouter.post('/applications/:id/start-review', idParams, adminController.startReview);
 adminRouter.post('/applications/:id/approve', idParams, validate({ body: approveBodySchema }), adminController.approve);
+adminRouter.post('/applications/:id/reject', idParams, validate({ body: rejectBodySchema }), adminController.reject);
