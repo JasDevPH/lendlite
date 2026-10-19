@@ -1125,4 +1125,54 @@ Money helpers (cents/bps), pure amortization (spec example ✓, 2,000-loan prope
 
 ---
 
-<!-- Next: Phase 5.1 multer config -->
+# Phase 5 — Documents
+
+## 5.1 `middleware/upload.ts` (multer config) + multer errors in `errorHandler`
+
+### What it does
+- **`UPLOAD_ROOT`** = `resolve(env.UPLOAD_DIR)`, an absolute path, created at startup if missing.
+- **Allow-list** of MIME type → extensions: `application/pdf → .pdf`, `image/jpeg → .jpg/.jpeg`, `image/png → .png`.
+- **`fileFilter`** accepts only if the MIME type is allowed **and** the file's extension belongs to *that* type. Otherwise → **400 `INVALID_FILE_TYPE`**.
+- **`diskStorage`** saves as **`<random UUID><ext>`** (e.g. `f56191cb-….pdf`) in `UPLOAD_ROOT`.
+- **Limits:** `fileSize` = `MAX_UPLOAD_MB` (5 MB), `files: 1`, `fields: 5`.
+- **`uploadSingleFile`** = `multer(...).single('file')`: one file from the multipart field `file`. Text fields like `type` land in `req.body`.
+- **`errorHandler`** now maps `MulterError`:
+  - `LIMIT_FILE_SIZE` → **413 `FILE_TOO_LARGE`** (spec).
+  - Anything else (wrong field name, too many files) → **400 `INVALID_UPLOAD`**.
+- **Multer 2.x:** the maintained line; 1.x had known DoS vulnerabilities.
+
+### Why
+- **Never trust the client's filename on disk:** it could be `../../src/app.ts` (path traversal), collide with another user's file, or contain odd characters. A random UUID name has none of those problems and can't be guessed. The original name is kept only in the DB, for display.
+- **Check mimetype *and* extension:** each alone is easy to fake. Requiring them to agree blocks lazy tricks like `virus.exe` renamed to `virus.pdf` (sent as `application/x-msdownload`), or a PNG named `.pdf`.
+- **Honest limitation:** both values are still **client-supplied**. A determined attacker can send real malware labelled `application/pdf` named `x.pdf`. Stronger options:
+  - **Magic-byte check:** read the file's first bytes (`%PDF`, `\x89PNG`, `FF D8 FF`). Added in the documents service next.
+  - Antivirus scanning, and serving files with `Content-Disposition: attachment`.
+- **Size limit enforced while streaming:** multer stops reading at 5 MB. It doesn't buffer a 2 GB upload first, and partial files are deleted (verified: nothing left on disk).
+- **413 Payload Too Large:** the correct HTTP status, so clients can show "file too big" specifically.
+- **`files: 1`, `fields: 5`:** caps on multipart abuse (thousands of fields/files in one request).
+- **Absolute upload path:** `./uploads` relative to *wherever the process started* is a classic deploy bug.
+- **Local disk is dev-only:** in production (multiple instances, ephemeral containers) files go to object storage like **S3**. That's optional Phase 11.
+
+### How to test
+Verified on a throwaway app (temp folder, cleaned up):
+
+| Upload | Result |
+|---|---|
+| `Payslip March.PDF` (application/pdf) | **200**, saved as `<uuid>.pdf`, original name kept |
+| `id.jpeg` (image/jpeg) | **200** |
+| `../../src/app.png` | **200**, original reduced to `app.png`, saved as `<uuid>.png` |
+| `notes.txt` / `virus.pdf` as exe type / `scan.pdf` as image/png | **400** `INVALID_FILE_TYPE` |
+| 6 MB PDF | **413** `FILE_TOO_LARGE` |
+| field named `document` / two files | **400** `INVALID_UPLOAD` |
+
+Only the 3 valid files remained on disk.
+
+### Interview points
+- *"How do you secure file uploads?"* — Allow-list types (MIME + extension + ideally magic bytes), size limits enforced while streaming, random storage names, store outside the web root, check ownership on download, and in production use object storage + virus scanning.
+- *"Why rename uploaded files?"* — Path traversal, overwrites, unguessable names, and no reliance on user-controlled strings in filesystem paths.
+- *"Can you trust the Content-Type of an upload?"* — No, it's set by the client. Check the actual bytes (magic numbers) for stronger assurance.
+- *"Why 413?"* — It's the standard "Payload Too Large" status: specific, and lets clients react appropriately.
+
+---
+
+<!-- Next: 5.2 documents service -->

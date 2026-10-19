@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 import { logger } from '../lib/logger';
 import { AppError } from '../utils/AppError';
@@ -47,7 +48,18 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     return;
   }
 
-  // 3. Malformed JSON or oversized body from express.json()
+  // 3. Upload problems from multer: too big → 413 (spec), anything else → 400
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(413).json({ error: { code: 'FILE_TOO_LARGE', message: 'File exceeds the maximum upload size' } });
+      return;
+    }
+    // e.g. LIMIT_UNEXPECTED_FILE (wrong field name / 2 files), LIMIT_FIELD_COUNT
+    res.status(400).json({ error: { code: 'INVALID_UPLOAD', message: err.message } });
+    return;
+  }
+
+  // 4. Malformed JSON or oversized body from express.json()
   if (isBodyParserError(err)) {
     if (err.type === 'entity.parse.failed') {
       res.status(400).json({ error: { code: 'INVALID_JSON', message: 'Request body is not valid JSON' } });
@@ -59,7 +71,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     }
   }
 
-  // 4. Anything else is a bug: log full details server-side, but never leak
+  // 5. Anything else is a bug: log full details server-side, but never leak
   //    stack traces or internals to the client
   logger.error({ err, method: req.method, url: req.originalUrl }, 'Unhandled error');
   res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } });

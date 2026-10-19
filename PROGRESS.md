@@ -25,6 +25,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **Express 4** (not 5) — the spec uses an async wrapper for error handling, which is the Express 4 pattern.
 - **CommonJS output** — simplest setup for Jest/ts-jest in Phase 7.
 - **`module`/`moduleResolution: node16` + `types: ["node"]`** — fixes editor errors under VS Code's bundled TS 6 (node10 resolution deprecated, `@types/node` no longer auto-included). Verified clean on TS 5 and TS 6.
+- **`CLAUDE.md` is gitignored and untracked** (kept locally only, at user request).
 - **Neon (serverless Postgres, Sydney) for the dev database** — added at user request. Docker Compose Postgres remains for the Phase 11 "fresh clone" setup.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
 
@@ -66,6 +67,17 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 8 | Audit log helper | Done (early, with #5) | `lib/audit.ts` `recordAudit(tx, entry)` — takes a transaction client so audit rows commit atomically with the change. Typed `AuditAction` union. |
 
 **Done when:** a customer can create, edit, and submit a draft; editing after submit → 409; repeated submit with same key returns same result.
+
+## Phase 5 — Documents (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Multer config (type/size limits) | Done | `middleware/upload.ts`: multer 2.4, PDF/JPG/PNG allow-list (MIME **and** extension must match), 5 MB limit, 1 file, random UUID filenames, absolute `UPLOAD_ROOT`. errorHandler: `LIMIT_FILE_SIZE` → 413 `FILE_TOO_LARGE`, other multer errors → 400. |
+| 2 | Documents service | Todo | |
+| 3 | Upload + download routes | Todo | |
+| 4 | Submit rule requiring ID + PAYSLIP | Todo | |
+
+**Done when:** uploads saved with random names, bad type → 400, >5MB → 413, submit without docs → 400.
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation
