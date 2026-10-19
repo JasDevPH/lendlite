@@ -698,4 +698,42 @@ Verified:
 
 ---
 
-<!-- Next: 3.5 middleware/requireRole.ts -->
+## 3.5 `middleware/requireRole.ts`
+
+### What it does
+`requireRole(...allowed)` is a **middleware factory**: you call it with roles, and it returns a middleware.
+```ts
+router.use(requireAuth, requireRole('ADMIN'));                 // whole admin router
+router.get('/x', requireAuth, requireRole('CUSTOMER', 'ADMIN'), handler);
+```
+- `req.user` missing (someone forgot `requireAuth`) → **401**. It *fails closed*.
+- Role not in `allowed` → **403** `FORBIDDEN`.
+- Otherwise → `next()`.
+
+### Why
+- **Separate from `requireAuth`:** single responsibility. One checks *identity*, the other *permission*, and you compose them per route.
+- **Factory pattern (`requireRole('ADMIN')`):** the same code works for any role combination; the roles are captured in a closure.
+- **Rest parameter (`...allowed: Role[]`):** allows multiple roles, and is typed with Prisma's `Role` enum, so a typo like `'ADMN'` is a compile error.
+- **Fail closed:** a security check that's misconfigured should *deny*, never *allow*.
+- **Role checks are not ownership checks.** `requireRole('CUSTOMER')` says "customers may call this", not "this customer owns application X". Ownership is checked in the **service layer** (Phase 4), returning **404** for other people's applications.
+
+### How to test
+Tested on a throwaway mini app (real admin routes come in Phase 6):
+
+| Request | Result |
+|---|---|
+| admin → admin-only | **200** |
+| customer → admin-only | **403** `FORBIDDEN` |
+| no token → admin-only | **401** (from `requireAuth`) |
+| customer / admin → customer-or-admin | **200** / **200** |
+| admin → route missing `requireAuth` | **401** Authentication required (fails closed) |
+
+### Interview points
+- *"How do you implement role-based access control (RBAC)?"* — Role stored on the user and carried in the JWT. A `requireRole` middleware is applied per route or router. Finer-grained rules (ownership) live in services.
+- *"What does fail closed mean?"* — When a security check can't decide (missing data, misconfiguration), it denies access.
+- *"What's a middleware factory?"* — A function that returns a middleware, so it can be configured (`requireRole('ADMIN')`, `validate({ body })`, `rateLimit({...})`).
+- *"Why 403 for wrong role but 404 for someone else's application?"* — Admin routes are known to exist anyway, so 403 is honest. For specific resources, 404 hides whether an ID exists, which prevents ID probing.
+
+---
+
+<!-- Next: 3.6 rate limiter -->

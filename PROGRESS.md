@@ -47,7 +47,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 2 | `auth.service.ts` (register/login/hash/sign) | Done | bcrypt cost 12; JWT HS256 `{sub, role}` 1h, algorithm pinned, payload Zod-validated. Register → CUSTOMER only, 409 `EMAIL_TAKEN` (incl. P2002 race). Login → 401 `INVALID_CREDENTIALS` (same msg + dummy-hash timing defence). `getCurrentUser`. `passwordHash` never returned. |
 | 3 | `auth.controller.ts` + routes | Done | `POST /auth/register` (201) and `POST /auth/login` live. Added `utils/asyncHandler.ts`, `middleware/validate.ts` (parsed output replaces req parts), `types/express.d.ts` (`req.user`). `me` controller ready; its route lands with the auth middleware. Verified via curl: 201/409/400/200/401/400. |
 | 4 | `middleware/auth.ts` | Done | `requireAuth`: parses `Bearer` header (case-insensitive), verifies JWT, sets `req.user = {id, role}`; 401 otherwise. `GET /auth/me` live. Verified 8 header/token cases. |
-| 5 | `middleware/requireRole.ts` | Todo | |
+| 5 | `middleware/requireRole.ts` | Done | `requireRole(...roles)` factory → 403 `FORBIDDEN` on wrong role; 401 if `req.user` missing (fails closed). Tested on a throwaway app (admin routes come in Phase 6). |
 | 6 | Rate limiter | Todo | |
 
 **Done when:** register, login, and `/auth/me` work via curl; wrong password → 401; 6th login in a minute → 429.
