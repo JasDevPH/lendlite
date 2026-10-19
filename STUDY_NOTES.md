@@ -1568,4 +1568,70 @@ APPROVED           UNDER_REVIEW → APPROVED    by Ada Admin  {"installments":18
 
 ---
 
-<!-- Next: 6.6 stats endpoint (raw SQL) -->
+## 6.6 Stats with raw SQL — `GET /admin/stats?since=`
+
+### What it does
+- **`statsQuerySchema`**: optional `since` (coerced to a `Date`; invalid → 400).
+- **`getStats({ since })`** runs **one raw SQL query** via `prisma.$queryRaw` (tagged template):
+  ```sql
+  SELECT "status",
+         COUNT(*)::int                           AS "count",
+         COALESCE(SUM("amountCents"), 0)::bigint AS "amountCents"
+  FROM "LoanApplication"
+  ${sinceFilter}          -- Prisma.sql`WHERE "createdAt" >= ${since}`  or  Prisma.empty
+  GROUP BY "status"
+  ```
+- Post-processing:
+  - Every status starts at **0** (statuses with no rows don't appear in `GROUP BY` output).
+  - `totalApplications` is the sum of the counts.
+  - `totalApprovedAmountCents` is the APPROVED row's sum, converted from **BigInt** to `Number`.
+- **Response:**
+  ```json
+  { "data": { "countsByStatus": { "DRAFT": 1, "SUBMITTED": 2, "UNDER_REVIEW": 1, "APPROVED": 3, "REJECTED": 1 },
+              "totalApplications": 8, "totalApprovedAmountCents": 8000000, "since": null } }
+  ```
+
+### Why
+- **Raw SQL here (spec requirement), and why it fits:** one `GROUP BY` returns every status's count and sum in a single round-trip. It's also the cleanest way to show I can write SQL, not just use an ORM.
+- **Why it's injection-safe:** `$queryRaw` is a **tagged template**. Prisma receives the SQL text and the `${values}` *separately*, sends the text with **placeholders** (`$1`), and sends the values as **bound parameters**. The database parses the SQL *before* it sees the values, so a value can never become SQL code. Demonstrated: `x'; DROP TABLE "User"; --` came back as a plain string and the table was untouched.
+- **What would be unsafe:** `$queryRawUnsafe(\`… WHERE "createdAt" >= '${since}'\`)` or any string concatenation. Then the attacker's quote ends the string literal and their text runs as SQL.
+- **`Prisma.sql` / `Prisma.empty` for optional clauses:** fragments are composed safely (still parameterised) instead of building SQL strings with `if`s.
+- **Defence in depth:** Zod rejects non-dates *before* the query runs, *and* the query is parameterised anyway.
+- **Quoted identifiers (`"amountCents"`, `"LoanApplication"`):** Postgres folds unquoted names to lowercase. Prisma created camelCase names, so they must be quoted (noted back in 2.2).
+- **Casts:**
+  - `COUNT(*)` returns BIGINT, which Prisma maps to JS `BigInt`. `::int` gives a normal number (counts won't exceed 2 billion).
+  - `SUM` of money stays `::bigint`, because a portfolio can exceed the 32-bit limit ($21.4M in cents).
+  - **`JSON.stringify` throws on BigInt**, so we convert with `Number(...)`, which is exact up to 2⁵³ cents (~$90 trillion).
+- **`COALESCE(SUM(...), 0)`:** `SUM` over zero rows is `NULL`, not 0.
+- **Cross-checked:** the raw SQL result matches Prisma's `groupBy` + `aggregate` exactly.
+
+### How to test
+```
+GET /api/v1/admin/stats                    (admin token)
+GET /api/v1/admin/stats?since=2026-01-01
+```
+Verified:
+
+| Case | Result |
+|---|---|
+| all | 8 apps, per-status counts, **$80,000** approved, matches Prisma's own aggregation |
+| `?since=2026-01-01` | 6 apps, $35,000 approved (2025 rows excluded) |
+| `?since=not-a-date` / injection string | **400** (validation) |
+| customer token | **403** |
+| injection demo | SQL text `SELECT ? AS "value"`, value sent separately, returned as plain data |
+
+### Interview points
+- *"Where's your raw SQL and why is it safe?"* — `admin.service.ts → getStats`. It uses `prisma.$queryRaw` as a tagged template, so interpolated values become bound parameters, never part of the SQL text. Unsafe would be `$queryRawUnsafe` or string concatenation.
+- *"What is SQL injection?"* — When user input is concatenated into a query, a crafted value (e.g. `'; DROP TABLE users; --`) changes the query's meaning. Parameterised queries prevent it by keeping code and data separate.
+- *"Why use raw SQL at all if you have an ORM?"* — For aggregations/reports the ORM can't express well or efficiently. Keep it isolated, parameterised and tested against the ORM's result.
+- *"Any gotchas with Postgres aggregates in JS?"* — COUNT/SUM return BIGINT → JS BigInt (not JSON-serialisable); SUM of no rows is NULL; identifiers need quoting if mixed-case.
+
+---
+
+# ✅ Phase 6 complete
+
+Admin review API: paginated, filterable review queue; start-review / approve / reject through the shared status machine with race-safe conditional updates; **atomic approval** (status + schedule + audit in one transaction, rollback proven); mandatory rejection reasons; full audit trail with batched actor lookup (no N+1); and dashboard stats in **parameterised raw SQL**.
+
+---
+
+<!-- Next: Phase 7.1 Jest config + test DB setup -->

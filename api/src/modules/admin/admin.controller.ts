@@ -1,5 +1,5 @@
 import { asyncHandler } from '../../utils/asyncHandler';
-import type { ApproveInput, ListApplicationsQuery, RejectInput } from './admin.schema';
+import type { ApproveInput, ListApplicationsQuery, RejectInput, StatsQuery } from './admin.schema';
 import * as adminService from './admin.service';
 
 // GET /admin/applications?status=&minAmount=&maxAmount=&page=&pageSize=
@@ -37,4 +37,10 @@ export const auditTrail = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const entries = await adminService.getAuditTrail(id);
   res.json({ data: entries });
+});
+
+// GET /admin/stats?since=
+export const stats = asyncHandler(async (req, res) => {
+  const result = await adminService.getStats(req.query as unknown as StatsQuery);
+  res.json({ data: result });
 });

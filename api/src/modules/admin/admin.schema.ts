@@ -40,3 +40,10 @@ export const rejectBodySchema = z.object({
 });
 
 export type RejectInput = z.infer<typeof rejectBodySchema>;
+
+// GET /admin/stats?since=2026-01-01 — optional: only applications created on/after this date
+export const statsQuerySchema = z.object({
+  since: z.coerce.date({ errorMap: () => ({ message: 'since must be a valid date, e.g. 2026-01-31' }) }).optional(),
+});
+
+export type StatsQuery = z.infer<typeof statsQuerySchema>;

@@ -5,7 +5,7 @@ import type { AuthUser } from '../../types/auth';
 import { AppError } from '../../utils/AppError';
 import { generateSchedule } from '../../utils/amortization';
 import { assertTransition } from '../applications/applications.status';
-import type { ListApplicationsQuery } from './admin.schema';
+import type { ListApplicationsQuery, StatsQuery } from './admin.schema';
 
 // ---------- Shared helpers for admin status changes ----------
 
@@ -141,6 +141,54 @@ export async function reject(id: string, admin: AuthUser, reason: string) {
 }
 
 // ---------- Queries ----------
+
+interface StatusRow {
+  status: ApplicationStatus;
+  count: number;
+  amountCents: bigint; // SUM can exceed 32-bit int, so Postgres returns BIGINT
+}
+
+// Dashboard numbers: count per status + total approved amount.
+// Written as RAW SQL on purpose (spec) to show plain SQL alongside Prisma.
+export async function getStats({ since }: StatsQuery) {
+  // Optional filter built as a SQL fragment. Prisma.empty = "nothing".
+  const sinceFilter = since ? Prisma.sql`WHERE "createdAt" >= ${since}` : Prisma.empty;
+
+  // $queryRaw is a TAGGED TEMPLATE: ${since} is NOT pasted into the SQL text.
+  // Prisma sends it separately as a bound parameter ($1), so the database
+  // treats it purely as a value — SQL injection is impossible.
+  // (Never use $queryRawUnsafe or string concatenation with user input.)
+  const rows = await prisma.$queryRaw<StatusRow[]>`
+    SELECT
+      "status",
+      COUNT(*)::int                          AS "count",
+      COALESCE(SUM("amountCents"), 0)::bigint AS "amountCents"
+    FROM "LoanApplication"
+    ${sinceFilter}
+    GROUP BY "status"
+  `;
+
+  // Statuses with no rows don't appear in GROUP BY output: start every one at 0
+  const countsByStatus = Object.fromEntries(
+    Object.values(ApplicationStatus).map((status) => [status, 0]),
+  ) as Record<ApplicationStatus, number>;
+  let totalApprovedAmountCents = 0;
+
+  for (const row of rows) {
+    countsByStatus[row.status] = row.count;
+    if (row.status === ApplicationStatus.APPROVED) {
+      // JSON can't serialise BigInt; Number is exact up to 2^53 cents (~$90 trillion)
+      totalApprovedAmountCents = Number(row.amountCents);
+    }
+  }
+
+  return {
+    countsByStatus,
+    totalApplications: rows.reduce((sum, row) => sum + row.count, 0),
+    totalApprovedAmountCents,
+    since: since ?? null,
+  };
+}
 
 // Full history of one application, oldest first, with who did each step
 export async function getAuditTrail(applicationId: string) {

@@ -79,7 +79,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** uploads saved with random names, bad type → 400, >5MB → 413, submit without docs → 400.
 
-## Phase 6 — Admin review (in progress)
+## Phase 6 — Admin review ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 3 | approve (transaction + schedule) | Done | `POST /admin/applications/:id/approve` `{ annualRateBps }` (500–2500). UNDER_REVIEW only. Schedule computed before tx; one `$transaction`: conditional status update + `createMany` installments + APPROVED audit (with metadata). **Atomicity proven** (forced step-2 failure → nothing saved). Race → 200 + 409, no duplicate schedule. Full DRAFT → APPROVED flow verified; final balance 0. |
 | 4 | reject | Done | `POST /admin/applications/:id/reject` `{ reason }` (trimmed, 10–1000). UNDER_REVIEW only; tx update (reason, decidedAt, decidedById) + REJECTED audit (reason in metadata). Final states can't be changed (409). Approve-vs-reject race → consistent single outcome. |
 | 5 | Audit trail endpoint | Done | `GET /admin/applications/:id/audit`: 404 for unknown app; entries oldest first; actors batch-loaded in one `IN` query (no N+1), joined via `Map`; `actor: null` if user deleted. Full lifecycle shows all 6 steps. |
-| 6 | Stats endpoint (raw SQL) | Todo | |
+| 6 | Stats endpoint (raw SQL) | Done | `GET /admin/stats?since=`: one `$queryRaw` tagged-template `GROUP BY` (counts + sums, `::int`/`::bigint`, `COALESCE`), optional `Prisma.sql` WHERE fragment. Zero-filled statuses, BigInt → Number. Cross-checked against Prisma `groupBy`/`aggregate`; injection demo passed. |
 
 **Done when:** full flow DRAFT → APPROVED works, schedule rows exist and final balance = 0, audit trail shows every step.
 
@@ -98,7 +98,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 3 — Authentication
 - [x] Phase 4 — Calculator + applications
 - [x] Phase 5 — Documents
-- [ ] Phase 6 — Admin review
+- [x] Phase 6 — Admin review
 - [ ] Phase 7 — Backend tests
 - [ ] Phase 8 — Frontend setup & auth
 - [ ] Phase 9 — Customer UI
