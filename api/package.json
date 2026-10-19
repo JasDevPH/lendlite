@@ -17,6 +17,7 @@
     "db:neon": "tsx scripts/setup-neon.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
     "express": "^4.22.3",
@@ -30,7 +31,11 @@
     "@types/express": "^4.17.25",
     "@types/node": "^20.19.43",
     "pino-pretty": "^13.2.0",
+    "prisma": "^6.19.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }

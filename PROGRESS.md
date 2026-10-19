@@ -28,6 +28,17 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **Neon (serverless Postgres, Sydney) for the dev database** — added at user request. Docker Compose Postgres remains for the Phase 11 "fresh clone" setup.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
 
+## Phase 2 — Database schema (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | `prisma/schema.prisma` | Done | Prisma **6.19** (stable; 8 is RC, 7 needs adapter/config). 3 enums, 5 models per spec + FK indexes on `Document.applicationId` and `AuditLog(applicationId, createdAt)`. `overrides: deepmerge-ts ^8` fixes a CLI-only vuln → `npm audit` 0. Validated + client generated. |
+| 2 | First migration | Todo | |
+| 3 | `lib/prisma.ts` | Todo | |
+| 4 | `prisma/seed.ts` | Todo | |
+
+**Done when:** `npx prisma migrate dev` succeeds, `npx prisma db seed` creates both users, `/health` reports DB ok.
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [ ] Phase 2 — Database schema

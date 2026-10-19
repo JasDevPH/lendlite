@@ -1,0 +1,121 @@
+// LendLite data model.
+// Money rule: all money is integer CENTS (Int), rates are BASIS POINTS (Int, 12.50% = 1250).
+// Never floats: 0.1 + 0.2 !== 0.3 in floating point, and money must be exact.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+// Status machine (enforced in the service layer):
+// DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED | REJECTED
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CASUAL
+  SELF_EMPLOYED
+  UNEMPLOYED
+}
+
+model User {
+  id           String            @id @default(uuid())
+  email        String            @unique
+  passwordHash String
+  fullName     String
+  role         Role              @default(CUSTOMER)
+  createdAt    DateTime          @default(now())
+  applications LoanApplication[]
+}
+
+model LoanApplication {
+  id                   String                 @id @default(uuid())
+  userId               String
+  user                 User                   @relation(fields: [userId], references: [id])
+  status               ApplicationStatus      @default(DRAFT)
+  amountCents          Int // 200000–5000000 ($2,000–$50,000 AUD)
+  termMonths           Int // 6–60
+  purpose              String
+  annualRateBps        Int? // set by admin on approval (500–2500 = 5%–25%)
+  employmentType       EmploymentType?
+  employerName         String?
+  annualIncomeCents    Int?
+  monthlyExpensesCents Int?
+  rejectionReason      String?
+  // Unique: the same Idempotency-Key can never be stored against two applications
+  idempotencyKey       String?                @unique
+  submittedAt          DateTime?
+  decidedAt            DateTime?
+  decidedById          String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  documents            Document[]
+  schedule             RepaymentInstallment[]
+  auditLogs            AuditLog[]
+
+  // Admin list filters by status; customer list filters by userId
+  @@index([status])
+  @@index([userId])
+}
+
+model Document {
+  id            String          @id @default(uuid())
+  applicationId String
+  // Cascade: deleting an application removes its document rows too
+  application   LoanApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          String // "PAYSLIP" | "ID" | "BANK_STATEMENT"
+  fileName      String // original name, shown to the user
+  storagePath   String // random name on disk, never user-controlled
+  mimeType      String
+  sizeBytes     Int
+  uploadedAt    DateTime        @default(now())
+
+  // Postgres doesn't auto-index foreign keys; we look documents up by application
+  @@index([applicationId])
+}
+
+model RepaymentInstallment {
+  id             String          @id @default(uuid())
+  applicationId  String
+  application    LoanApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  installmentNo  Int
+  dueDate        DateTime
+  paymentCents   Int
+  principalCents Int
+  interestCents  Int
+  balanceCents   Int
+
+  // One row per installment number per loan (also serves as the FK index)
+  @@unique([applicationId, installmentNo])
+}
+
+model AuditLog {
+  id            String             @id @default(uuid())
+  applicationId String
+  application   LoanApplication    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  actorId       String // who did it (customer or admin user id)
+  action        String // "CREATED" | "SUBMITTED" | "REVIEW_STARTED" | "APPROVED" | "REJECTED" | "DOCUMENT_UPLOADED"
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus?
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+
+  // Audit trail is always fetched per application, oldest → newest
+  @@index([applicationId, createdAt])
+}

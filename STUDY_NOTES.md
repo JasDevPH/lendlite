@@ -293,4 +293,62 @@ Express + TypeScript API with validated config, structured logging, centralised 
 
 ---
 
-<!-- Next: Phase 2.1 prisma/schema.prisma -->
+# Phase 2 — Database schema
+
+## 2.1 `prisma/schema.prisma`
+
+### What it does
+The single source of truth for the database structure. From it Prisma:
+- generates **SQL migrations** (next component), and
+- generates a **fully typed client** (`prisma.loanApplication.findMany(...)` with autocomplete and type errors for wrong fields).
+
+It contains:
+- **`generator` / `datasource`:** use the JS client; connect to PostgreSQL via `DATABASE_URL` (Neon or Docker; Prisma doesn't care which).
+- **3 enums:** `Role`, `ApplicationStatus`, `EmploymentType`. These become real Postgres enum types, so the DB itself rejects invalid values.
+- **5 models:**
+
+| Model | Purpose | Key relations |
+|---|---|---|
+| `User` | Customers + admins; `email` unique | has many `LoanApplication` |
+| `LoanApplication` | The loan, its status, money fields | belongs to `User`; has many documents, installments, audit logs |
+| `Document` | Metadata for an uploaded file (file itself is on disk) | belongs to application, **cascade delete** |
+| `RepaymentInstallment` | One row per month of the schedule | `@@unique([applicationId, installmentNo])` |
+| `AuditLog` | Who changed what, from/to status | belongs to application |
+
+### Why
+- **Integer cents and basis points, never floats.** Floating point can't represent most decimals exactly (`0.1 + 0.2 = 0.30000000000000004`). With money that becomes cents going missing. Integers are exact; formatting to dollars happens only at display time.
+- **UUID ids, not auto-increment:** IDs can't be guessed or enumerated (`/applications/1`, `/2`, `/3`…), and don't leak how many loans exist.
+- **DB enums:** the database enforces valid statuses even if a bug bypasses app validation (defence in depth).
+- **`idempotencyKey @unique`:** the database guarantees one key maps to at most one application, even under a race between two simultaneous requests.
+- **Indexes:**
+  - `status` (admin filter) and `userId` (customer's own list) on `LoanApplication`.
+  - `applicationId` on `Document`, and `(applicationId, createdAt)` on `AuditLog` (fetch the trail in time order).
+  - **Postgres does not auto-index foreign keys,** so lookups by `applicationId` would otherwise scan the whole table.
+- **`@@unique([applicationId, installmentNo])`:** you can't accidentally insert installment #3 twice. It also acts as the index for `applicationId`.
+- **`onDelete: Cascade`** on child tables: deleting an application cleans up its documents/schedule/audit rows. `User → LoanApplication` keeps the default (**Restrict**): you can't delete a user who has loans, because in lending you keep that history.
+- **`@updatedAt`:** Prisma sets it automatically on every update.
+- **`decidedById`/`actorId` are plain strings (no FK), as in the spec.** Audit records should survive even if a user record changes. It also keeps the schema simple.
+- **Prisma 6, not 7/8:** 8 is a release candidate, and 7 needs a config file + driver adapter + custom client output. Prisma 6 is stable and simpler to explain. `$transaction` / `$queryRaw` work the same.
+- **npm `overrides` for `deepmerge-ts`:** the Prisma 6 CLI pulled in a version with a known vulnerability (stack exhaustion). Rather than a breaking upgrade, we force the patched v8 of that one sub-dependency. `npm audit` → 0 vulnerabilities, and the CLI still works.
+
+### How to test
+```powershell
+cd api
+npx prisma format      # tidies alignment
+npx prisma validate    # → "The schema at prisma\schema.prisma is valid 🚀"
+npx prisma generate    # → "Generated Prisma Client (v6.19.3)"
+npm audit              # → found 0 vulnerabilities
+```
+(No tables exist yet; the migration is the next component.)
+
+### Interview points
+- *"Why store money as integer cents?"* — Floats are binary approximations, and rounding errors compound across interest calculations. Integers are exact. Alternative: Postgres `NUMERIC`/`DECIMAL`, but integers are simplest and fastest when you only need cents.
+- *"Why UUIDs over auto-increment IDs?"* — They aren't guessable (it pairs with returning 404 for others' applications), can be generated anywhere, and don't leak business volume. Trade-off: bigger indexes and random insert order.
+- *"Which indexes did you add and why?"* — For each real query pattern: filter by status, list by user, fetch documents/audit by application. Foreign keys aren't indexed automatically in Postgres.
+- *"How does the DB help enforce business rules?"* — Enums, unique constraints (email, idempotency key, installment number) and FKs are a safety net under the app-level validation.
+- *"What's an ORM's advantage / risk?"* — Type safety, migrations and parameterised queries by default (no SQL injection). The risk is hidden inefficient queries, so you check generated SQL and drop to raw SQL where needed (our stats endpoint).
+- *"How did you handle a vulnerable transitive dependency?"* — I checked whether it was actually reachable (CLI-only, merges our own config), then used `overrides` to pin the patched version instead of a breaking major upgrade, and re-ran audit and the CLI to verify.
+
+---
+
+<!-- Next: 2.2 first migration -->
