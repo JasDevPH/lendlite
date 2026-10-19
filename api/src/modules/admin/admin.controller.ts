@@ -41,6 +41,8 @@ export const auditTrail = asyncHandler(async (req, res) => {
 
 // GET /admin/stats?since=
 export const stats = asyncHandler(async (req, res) => {
-  const result = await adminService.getStats(req.query as unknown as StatsQuery);
+  // validate() already replaced req.query with the parsed values (since is a real Date)
+  const query = req.query as unknown as StatsQuery;
+  const result = await adminService.getStats(query);
   res.json({ data: result });
 });

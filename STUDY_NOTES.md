@@ -2877,7 +2877,7 @@ docker compose down              # add -v to wipe DB + uploads
 ### Interview points
 - *"What does your CI pipeline do?"* — Typecheck, lint, unit + integration tests against a real Postgres service, production builds, a dependency audit, then a Docker Compose smoke test of the full stack. CD waits for all of it.
 - *"CI vs CD?"* — CI verifies every change automatically. CD ships the verified change automatically: here, Railway deploys `main` only after CI passes.
-- *"What would you add next?"* — ESLint for the API, browser E2E tests (Playwright) in CI, and preview environments per pull request.
+- *"What would you add next?"* — Browser E2E tests (Playwright) in CI, and preview environments per pull request.
 
 ---
 
@@ -2979,6 +2979,45 @@ The check never compared **which** application owned the key.
 - *"Tell me about a bug you fixed."* — This one. It's a concurrency bug in idempotency handling: found by CI, kept out of production by the deploy gate, root-caused by tracing the interleaving, reproduced deterministically, and fixed test-first in a PR.
 - *"How do you test race conditions?"* — Concurrent tests can find them but are flaky by nature. Once you understand the interleaving, write a deterministic test that forces it (a stubbed stale read, a controlled pause), so the fix is proven every run.
 - *"Why did CI matter here?"* — The bug only showed up on some runs. Running the suite on every push, and gating deploys on it, is what turned an intermittent failure into a caught bug instead of a production incident.
+
+---
+
+## 11.9 API linting (ESLint + typescript-eslint)
+
+### What it does
+- **`api/eslint.config.mjs`:** ESLint 9 (flat config, same version as the web app) with `@eslint/js` recommended + **`typescript-eslint` `recommendedTypeChecked`**.
+  - Type-aware rules read TypeScript's types through the same three tsconfig projects that `npm run typecheck` uses (src, prisma, tests).
+  - Tests turn off only the `no-unsafe-*` rules, because supertest's `res.body` is `any` by design.
+  - The local helper `scripts/` folder is ignored, since it's not in git.
+- **`npm run lint`**, and CI's API job now runs it, after `prisma generate` because the rules need the generated client's types.
+- **Fixes from the first run:**
+  - `validate()` assigned Zod's generic `any` straight into `req.body/query/params`. Each assignment now states its type.
+  - Two stale casts were removed. The stats controller keeps an explicit `StatsQuery` so the intent stays visible.
+
+### The bonus bug it found
+- `tests/tsconfig.json` extends the root config and **inherits its `exclude: ["tests"]`**. That path resolves relative to the *root* config, so it excluded the whole `tests/` folder.
+- Result: `tsc -p tests` **type-checked zero test files** since Phase 7. ts-jest didn't catch it either: with `isolatedModules` it compiles without type-checking.
+- Fix: override `exclude` in `tests/tsconfig.json`. All 14 test files are now checked, and no hidden type errors were found.
+- How it surfaced: the type-aware linter said "file not found in any project". `tsc --listFilesOnly` confirmed it.
+
+### Why
+- **Type-aware linting catches real bugs**, not style:
+  - `no-floating-promises`: an un-awaited promise in a handler means an error that's silently lost.
+  - `no-misused-promises`: async functions passed where a sync callback is expected.
+  - `no-unsafe-*`: `any` leaking through the code.
+- **Lint in CI** turns those rules into a gate, the same way tests are.
+- **Verify the checker itself:** a green check that checks nothing is worse than no check. `--listFilesOnly` is a quick way to prove which files a tsconfig really covers.
+
+### How to test
+```bash
+cd api
+npm run lint                               # 0 problems
+npx tsc -p tests --listFilesOnly | grep /tests/   # 14 files (was 0)
+```
+
+### Interview points
+- *"Why type-aware linting?"* — It uses the type checker, so it can tell a promise from a value. That catches floating promises and unsafe `any` flow that plain ESLint and even `tsc` allow.
+- *"Tell me about a time a tool was giving you false confidence."* — The test tsconfig silently excluded all tests through an inherited `exclude`, so "typecheck passed" meant nothing for tests. The linter exposed it, `--listFilesOnly` confirmed it, and a one-line override fixed it.
 
 ---
 

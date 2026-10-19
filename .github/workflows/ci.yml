@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   api:
-    name: API — typecheck, test, build
+    name: API — lint, typecheck, test, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,6 +48,8 @@ jobs:
       # ci = exact versions from the lockfile (fails if it's out of sync)
       - run: npm ci
       - run: npx prisma generate
+      # Type-aware lint needs the generated Prisma client types, so it runs after generate
+      - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

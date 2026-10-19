@@ -1,5 +1,4 @@
 import { Readable } from 'node:stream';
-import type { ReadableStream } from 'node:stream/web';
 import { v2 as cloudinary } from 'cloudinary';
 import { AppError } from '../../utils/AppError';
 import type { FileStorage } from './fileStorage';
@@ -47,7 +46,7 @@ export function createCloudinaryStorage(cloudinaryUrl: string, folder: string): 
       const res = await fetch(url);
       if (res.status === 404) throw new AppError(404, 'NOT_FOUND', 'Document file is missing');
       if (!res.ok || !res.body) throw new Error(`Cloudinary download failed with status ${res.status}`);
-      return Readable.fromWeb(res.body as ReadableStream);
+      return Readable.fromWeb(res.body);
     },
 
     async remove(key) {
