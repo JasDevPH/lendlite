@@ -137,7 +137,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | Stats cards | Done | `StatsOverview`: period filter (`?since=`), 4 stat tiles (awaiting, under review, approved + approval rate, total approved compact), `PipelineBar` stacked bar (2px gaps, hover/focus tooltips, legend = table view). Palette **validated** (fixed red/green CVD clash: rose-700, worst ΔE 8.9). Largest-remainder % (always 100). E2E 11/11. |
-| 2 | Applications table + filters + pagination | Todo | |
+| 2 | Applications table + filters + pagination | Done | `ApplicationsTable`: URL-driven filters (`?status=&min=&max=&page=`, dollars→cents), validation, accessible table with Review links, pagination summary + Prev/Next, keep-previous-while-loading, empty/error states. Fixed sr-only page overflow (`relative` on scroll box; also schedule table). E2E 15/15. |
 | 3 | Detail page | Todo | |
 | 4 | Approve/reject modals | Todo | |
 | 5 | Audit trail view | Todo | |

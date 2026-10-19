@@ -2509,4 +2509,44 @@ Real browser, **11/11** (applications seeded in every status, some dated last ye
 
 ---
 
-<!-- Next: 10.2 applications table + filters + pagination -->
+## 10.2 Admin applications table (filters + pagination)
+
+### What it does
+- **`ApplicationsTable`** on `/admin` (below the stats), from `GET /admin/applications`:
+  - **Filters in one row:** Status (default "All (excluding drafts)"), Min/Max amount ($), **Apply** / **Reset**.
+  - **URL is the state:** `/admin?status=SUBMITTED&min=5000&max=30000&page=2`. Dollars in the URL (readable), **converted to cents** for the API (`minAmount=500000`). Page size 10.
+  - **URL params are validated:** unknown status or bad page → defaults.
+  - **Client checks:** amounts must be dollars, and min ≤ max (error shown, URL unchanged). New filters reset to page 1.
+  - **Table:** applicant (name + email), amount, term, `StatusBadge`, document count, submitted date, **Review →** (to `/admin/applications/:id`, with a descriptive `aria-label`). Semantic `<caption>` / `scope`.
+  - **Pagination:** "Showing 11–20 of 20", Previous/Next disabled at the ends and while loading.
+  - **States:** skeleton rows; previous results **kept and dimmed** while the next page loads; empty ("No applications match these filters" + **Clear filters**); error + **Try again**.
+- `admin/page.tsx` wraps the table in `<Suspense>` (it uses `useSearchParams`).
+
+### Why
+- **URL-driven filters:** an admin can share or bookmark "all Submitted loans between $5k and $30k", refresh without losing it, and use Back/Forward. That's the same principle as the application wizard.
+- **Form state ≠ applied state:** typing in the filters doesn't refetch on every keystroke; **Apply** commits them to the URL, and the URL drives the fetch.
+- **Dollars for humans, cents for the API:** the conversion happens once, at the boundary (`parseDollarsToCents`, string-based).
+- **Keep old results while loading:** paging feels instant and the layout doesn't jump. The dim + `aria-busy` signals that it's updating.
+- **Drafts hidden by default** mirrors the API: admins review submitted work.
+- **CSS gotcha (found by a test):**
+  - The **screen-reader-only** caption and the "Actions" header label use `position: absolute` (Tailwind `sr-only`).
+  - An absolutely positioned element is only clipped by an **ancestor that is positioned**, and the scroll box (`overflow-x-auto`) was `position: static`. So an invisible 1 px label in the last column made the **whole page 668 px wide on a 390 px phone**.
+  - **Fix:** `relative` on the scroll container. Found by measuring the outermost element wider than the viewport, not by guessing. The same fix was applied to the customer's schedule table.
+
+### How to test
+Real browser, **15/15** (23 seeded applications; every page/filter compared with the API's response for the same query):
+- **Default view:** rows and order = API, drafts excluded, "Showing 1–10 of 20", Previous disabled, rows link to the detail page.
+- **Paging + filters:** Next → `?page=2` = API page 2; filters → `?status=SUBMITTED&min=5000&max=30000`, rows = API (all Submitted, $5k–$30k).
+- **URL state:** refresh keeps filters (form + results); **Back** returns to the previous view.
+- **Validation:** min > max → error, URL unchanged; tampered `?status=HACKED&page=-3` → default view.
+- **States:** no matches → empty state; Clear filters resets; API 500 → error, Try again recovers.
+- **Layout:** **no page overflow on mobile** (after the `relative` fix); no JS errors.
+
+### Interview points
+- *"How do you implement filterable, paginated tables?"* — Filters and page in the URL (shareable, back-button friendly), a form that commits on Apply, server-side filtering/pagination, previous data kept while loading, and empty/error states.
+- *"Why server-side pagination?"* — The client only downloads one page. The DB does the filtering with indexes (`status` is indexed), so it scales to thousands of applications.
+- *"A layout bug you debugged?"* — Invisible `sr-only` text escaping an `overflow` container because the container wasn't positioned. I wrote a probe that listed the outermost element wider than the viewport, which pointed straight at it.
+
+---
+
+<!-- Next: 10.3 admin detail page -->

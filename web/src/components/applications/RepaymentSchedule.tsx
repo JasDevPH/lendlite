@@ -53,7 +53,8 @@ export function RepaymentSchedule({ schedule, applicationId }: { schedule: Insta
       )}
 
       {/* The table scrolls sideways on small screens instead of squashing the numbers */}
-      <div className="overflow-x-auto rounded-xl border border-line">
+      {/* relative: keeps the absolutely-positioned sr-only caption inside the scroll box */}
+      <div className="relative overflow-x-auto rounded-xl border border-line">
         <table className="money w-full min-w-160 text-sm">
           <caption className="sr-only">Repayment schedule: {schedule.length} monthly installments</caption>
           <thead className="bg-canvas text-left text-xs uppercase tracking-wide text-muted">
