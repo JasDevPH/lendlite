@@ -60,10 +60,10 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 2 | `utils/amortization.ts` | Done | Pure `calculateMonthlyPayment`, `generateSchedule`, `addMonths` (UTC, month-end clamp, no drift). 0% handled; last installment absorbs rounding → final balance 0. Spec example $888.49/mo ✓; 2,000 random loans pass all invariants. |
 | 3 | Calculator module | Done | Public `POST /calculator/quote`. Strict-integer Zod schema using shared `config/loanRules.ts` (`LOAN_LIMITS`). Service reuses `generateSchedule`. Spec example → 88849/mo, 66186 interest ✓. |
 | 4 | Applications schema | Done | `createApplicationSchema` (amount/term/purpose required, employment optional), `updateApplicationSchema` (all optional, non-empty), `applicationIdParamsSchema` (UUID). Shared `amountCentsField`/`termMonthsField`/`annualRateBpsField` moved to `config/loanRules.ts`; calculator refactored to use them. Protected fields stripped. |
-| 5 | Applications service (create/list/get/update, ownership + status rules) | Todo | |
+| 5 | Applications service (create/list/get/update, ownership + status rules) | Done | create (tx + CREATED audit), listMine, get (owner/admin, incl. documents + schedule), updateDraft (owner only, atomic DRAFT-only update, P2025 → 409). Others' apps → 404. Added `types/auth.ts` (`AuthUser`). |
 | 6 | Applications controller/routes | Todo | |
 | 7 | Submit with idempotency | Todo | |
-| 8 | Audit log helper | Todo | |
+| 8 | Audit log helper | Done (early, with #5) | `lib/audit.ts` `recordAudit(tx, entry)` — takes a transaction client so audit rows commit atomically with the change. Typed `AuditAction` union. |
 
 **Done when:** a customer can create, edit, and submit a draft; editing after submit → 409; repeated submit with same key returns same result.
 

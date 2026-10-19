@@ -964,4 +964,52 @@ Verified with a throwaway script:
 
 ---
 
-<!-- Next: 4.5 applications service -->
+## 4.5 `applications.service.ts` (+ `lib/audit.ts`, `types/auth.ts`)
+
+### What it does
+- **`types/auth.ts`**: `AuthUser = { id, role }`, the type for "who is calling". `req.user` uses it, and services take it as a parameter (never the Express `req`).
+- **`lib/audit.ts`** (the spec's "audit log helper", built early because `create` needs it): `recordAudit(tx, { applicationId, actorId, action, fromStatus?, toStatus?, metadata? })`. It takes a **transaction client**, so audit rows are saved atomically with the change.
+- **`applications.service.ts`**:
+
+| Function | Who | Rules |
+|---|---|---|
+| `createApplication(user, input)` | customer | `userId` from the token; DRAFT + `CREATED` audit row in **one transaction** |
+| `listMyApplications(user)` | customer | Only `userId = me`, newest first |
+| `getApplication(id, user)` | owner or admin | Includes `documents` + `schedule` (ordered); others → **404** |
+| `updateDraft(id, user, input)` | **owner only** | Not mine → **404**; not DRAFT → **409** `APPLICATION_NOT_EDITABLE`; atomic DRAFT-only update |
+
+### Why
+- **Business rules live in the service, not the controller.** Ownership and status rules are enforced in one place no matter who calls it (HTTP, tests, a future job). The spec demands this ("enforce in the service layer").
+- **404 instead of 403 for someone else's application:** if you returned 403, an attacker could tell "this ID exists but isn't yours" apart from "no such ID", and probe for valid IDs. With the same 404 for both, nothing leaks. (UUIDs make guessing hard; this closes the gap entirely.)
+- **Ownership inside the `WHERE` clause** (`{ id, userId }`), not "fetch then compare": there's no code path where someone else's data is even loaded into memory, and it's one query.
+- **`userId` from the token, never the body:** a customer can't create an application in someone else's name.
+- **Transactions for create + audit:** if the audit insert fails, the application isn't created either. An audit trail with gaps is worthless for compliance.
+- **Atomic conditional update (`where: { id, status: 'DRAFT' }`):** "check then update" has a race. A submit could land between the read and the write. Putting `status: DRAFT` in the update's WHERE means the DB only updates if it's *still* a draft. Otherwise Prisma throws **P2025** and we return 409. This is **optimistic concurrency** in miniature.
+- **409 Conflict for editing a non-draft:** the request is valid, but it conflicts with the resource's current state.
+- **Admins can view but not edit customer data:** separation of duties. Admins act via dedicated review endpoints (Phase 6), each audited.
+- **No audit row for draft edits:** the spec's actions are status changes and uploads. Editing a draft isn't a decision point.
+
+### How to test
+Verified with a throwaway script against Neon (test data deleted afterwards):
+```
+✔ customer creates draft                → status DRAFT, audit: CREATED →DRAFT by customer
+✔ customer lists own                    → contains it; OTHER customer's list does not
+✔ owner gets detail                     → includes documents[] and schedule[]
+✔ admin gets detail
+✖ OTHER customer gets detail            → 404 NOT_FOUND
+✖ non-existent id                       → 404 NOT_FOUND (identical response)
+✔ owner updates draft                   → employer set, other fields unchanged
+✖ OTHER customer / admin updates        → 404 NOT_FOUND
+✖ owner edits after SUBMITTED           → 409 APPLICATION_NOT_EDITABLE
+```
+
+### Interview points
+- *"Why 404 and not 403 for another user's application?"* — To avoid an enumeration oracle: "not yours" and "doesn't exist" must look identical.
+- *"Where do you enforce ownership?"* — In the service, as part of the DB query's WHERE clause, so it's impossible to forget in a controller and impossible to load others' data by accident.
+- *"What's a race condition here and how did you handle it?"* — Read DRAFT → (submit happens) → write. Fixed with a conditional update (`WHERE status = 'DRAFT'`), letting the database be the arbiter.
+- *"Why write the audit log inside the same transaction?"* — Atomicity: the change and its record must succeed or fail together.
+- *"Why pass `AuthUser` into services instead of `req`?"* — It keeps services framework-independent and testable; they don't know HTTP exists.
+
+---
+
+<!-- Next: 4.6 applications controller + routes -->
