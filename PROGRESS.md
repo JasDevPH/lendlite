@@ -19,6 +19,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **TypeScript pinned to 5.x** — npm defaulted to TS 7 (Go port); ts-jest and most tooling still target TS 5.
 - **Express 4** (not 5) — the spec uses an async wrapper for error handling, which is the Express 4 pattern.
 - **CommonJS output** — simplest setup for Jest/ts-jest in Phase 7.
+- **`module`/`moduleResolution: node16` + `types: ["node"]`** — fixes editor errors under VS Code's bundled TS 6 (node10 resolution deprecated, `@types/node` no longer auto-included). Verified clean on TS 5 and TS 6.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
 
 ## Phases overview
