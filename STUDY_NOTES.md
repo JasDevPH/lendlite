@@ -2320,4 +2320,49 @@ Real browser, **17/17** (+ Step 1 regression 21/21 after the `StepActions` refac
 
 ---
 
-<!-- Next: 9.3c/9.4 documents step -->
+## 9.4 Document upload (wizard Step 3)
+
+### What it does
+- **`lib/documents.ts`:**
+  - `checkFile()` mirrors the API's rules: PDF/JPG/PNG with a **matching extension**, ≤ 5 MB, not empty.
+  - `ACCEPT_ATTRIBUTE` filters the OS file picker.
+  - `DOCUMENT_TYPES`: Photo ID + Recent payslip (**required**), Bank statement (optional), with plain-English descriptions.
+  - `downloadDocument()`: authenticated `fetch` → Blob → temporary object URL → save, then revoke the URL.
+- **`components/documents/DocumentUploadRow`** (one per type):
+  - Title, Required/Optional badge (→ **✓ Uploaded**), description.
+  - A button that opens a **visually hidden `<input type="file">`**, plus **drag-and-drop** onto the row.
+  - Browser check first; then `FormData` (`type` + `file`) → `POST /applications/:id/documents`.
+  - Spinner while uploading. The API's error codes become friendly messages (`FILE_TOO_LARGE`, `INVALID_FILE_TYPE`, `APPLICATION_NOT_EDITABLE`).
+- **`components/documents/DocumentFileItem`:** file chip (type, name, size, date) + **View**. Reused later on the detail page.
+- **`DocumentsStep`:** three rows; **"Continue to review" disabled until ID + payslip exist**; an `aria-live` checklist ("Still needed: …").
+- **`formatBytes()`** helper.
+
+### Why
+- **Validate in the browser *and* on the server:** the browser check gives instant feedback (a 6 MB file is rejected before any upload: **0 requests sent**). The server remains the authority: an `.exe` renamed to `.pdf` with a PDF MIME type passes the browser check, but the API's **magic-byte check** rejects it.
+- **Upload immediately, per file:** each document is saved the moment it's chosen, which fits "progress saved as you go". There's no big all-or-nothing submit.
+- **Hidden input + real button:** native file inputs are hard to style. A `<button>` that calls `input.click()` keeps keyboard and screen-reader access while matching the design.
+- **Drag-and-drop as an enhancement,** not a requirement: the button always works.
+- **Downloads need the token:** `<a href>` can't send `Authorization`, hence fetch → Blob → object URL. `revokeObjectURL` frees the memory.
+- **Gate "Continue" on the business rule:** the same requirement the API enforces at submit (ID + PAYSLIP), so the user can't reach review with missing documents.
+- **No upload progress bar:** `fetch` can't report *upload* progress. An `XMLHttpRequest` with `upload.onprogress` could; for ≤5 MB files a spinner is enough.
+- **Honest copy:** I avoided claiming "encrypted in transit". That's true in production with HTTPS, but not in local HTTP development.
+- **No delete:** the API has no delete endpoint (documents are evidence for review). Users can add another file.
+
+### How to test
+Real browser, **15/15**:
+- **Gating:** Continue disabled + "Still needed: Photo ID and Recent payslip"; Required/Optional badges.
+- **Browser checks:** `.txt` and 6 MB → rejected in the browser, **0 upload requests**.
+- **Server check:** `.exe` disguised as `.pdf` → rejected **by the server** ("isn't a valid PDF, JPG or PNG").
+- **Uploads:** ID via the file picker → ✓ Uploaded; payslip via **drag-and-drop** → ✓ Uploaded → Continue enabled.
+- **View:** downloads the **exact bytes** with the original filename.
+- **Persistence:** refresh still lists both; DB has exactly `ID,PAYSLIP`; Continue → step 4.
+- **Layout:** no mobile overflow; no JS errors; test files removed from `api/uploads`.
+
+### Interview points
+- *"How do you validate file uploads on the frontend?"* — `accept` on the input, then a type + extension + size check before uploading for instant feedback. The server re-checks everything, including magic bytes, because client checks can be bypassed.
+- *"How do you download a protected file in a SPA?"* — Fetch it with the auth header, get a Blob, create an object URL, trigger a download, then revoke the URL.
+- *"How would you show upload progress?"* — `fetch` can't report upload progress; use `XMLHttpRequest.upload.onprogress` (or a library built on it).
+
+---
+
+<!-- Next: 9.3c review & submit -->

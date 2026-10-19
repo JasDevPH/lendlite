@@ -46,6 +46,13 @@ export function parseDollarsToCents(input: string): number | null {
   return Number(dollars) * 100 + Number(cents.padEnd(2, '0'));
 }
 
+// 1536 → "1.5 KB", 2_400_000 → "2.3 MB"
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // 24 → "24 months", 1 → "1 month"
 export function formatMonths(months: number): string {
   return `${months} ${months === 1 ? 'month' : 'months'}`;

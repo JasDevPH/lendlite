@@ -8,6 +8,7 @@ import { Button, buttonClasses } from '@/components/ui/Button';
 import { LOAN_LIMITS as L } from '@/lib/loanRules';
 import type { LoanApplicationDetail } from '@/lib/types';
 import { useApi } from '@/lib/useApi';
+import { DocumentsStep } from './DocumentsStep';
 import { EmploymentStep } from './EmploymentStep';
 import { LoanDetailsStep } from './LoanDetailsStep';
 import { Stepper, type StepDefinition } from './Stepper';
@@ -115,6 +116,14 @@ export function ApplicationWizard() {
               reload();
               goTo('documents');
             }}
+          />
+        ) : step === 'documents' && application ? (
+          <DocumentsStep
+            key={application.id}
+            application={application}
+            onBack={() => goTo('employment')}
+            onContinue={() => goTo('review')}
+            onChanged={reload}
           />
         ) : (
           <ComingNextStep label={STEPS[stepIndex]!.label} onBack={() => goTo(STEPS[stepIndex - 1]!.key)} />
