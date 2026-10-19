@@ -162,7 +162,7 @@ The test setup refuses to run against any database whose name doesn't end in `_t
 |---|---|---|
 | Dev server | `npm run dev` | `npm run dev` |
 | Type check | `npm run typecheck` | `npm run typecheck` |
-| Lint | — | `npm run lint` |
+| Lint | `npm run lint` | `npm run lint` |
 | Tests | `npm test` | — |
 | Build | `npm run build` | `npm run build` |
 
@@ -201,7 +201,7 @@ Base URL `/api/v1`. Success responses are `{ "data": … }`. Errors are `{ "erro
 
 Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml):
 
-1. **API:** typecheck → 90 tests against a Postgres service container → build → `npm audit` (production deps).
+1. **API:** lint (type-aware ESLint) → typecheck → 90 tests against a Postgres service container → build → `npm audit` (production deps).
 2. **Web:** lint → typecheck → `next build` → `npm audit`.
 3. **Compose smoke test:** `docker compose up --build` on a clean runner, then checks that the seed ran, the DB is reachable, the demo users can log in, an upload survives an API restart, and the web app renders.
 
@@ -225,6 +225,6 @@ Every push and pull request runs [GitHub Actions](.github/workflows/ci.yml):
 ### What I'd do next
 
 - `httpOnly` cookie sessions with refresh tokens instead of `localStorage`.
-- ESLint for the API, and Playwright browser tests in CI.
+- Playwright browser tests in CI.
 - Email notifications on status changes (via a background job queue).
 - Pin the same Postgres major version everywhere (production runs 18, dev/CI run 16).

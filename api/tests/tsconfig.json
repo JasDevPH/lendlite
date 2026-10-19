@@ -9,5 +9,8 @@
     // Type errors are caught by `npm run typecheck`, which includes this project.
     "isolatedModules": true
   },
-  "include": ["./**/*.ts", "../src/types/**/*.d.ts"]
+  "include": ["./**/*.ts", "../src/types/**/*.d.ts"],
+  // Override, don't inherit: the root config's exclude contains "tests" (resolved
+  // relative to the ROOT), which silently excluded every test file from this project
+  "exclude": ["../node_modules", "../dist"]
 }

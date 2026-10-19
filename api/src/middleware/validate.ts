@@ -13,9 +13,11 @@ interface RequestSchemas {
 export function validate(schemas: RequestSchemas): RequestHandler {
   return (req, _res, next) => {
     try {
-      if (schemas.body) req.body = schemas.body.parse(req.body);
-      if (schemas.query) req.query = schemas.query.parse(req.query);
-      if (schemas.params) req.params = schemas.params.parse(req.params);
+      // A generic schema's parse() returns `any`; state the slot's type instead of
+      // letting `any` flow on silently (each controller narrows it to its schema's type)
+      if (schemas.body) req.body = schemas.body.parse(req.body) as unknown;
+      if (schemas.query) req.query = schemas.query.parse(req.query) as typeof req.query;
+      if (schemas.params) req.params = schemas.params.parse(req.params) as typeof req.params;
       next();
     } catch (err) {
       next(err);
