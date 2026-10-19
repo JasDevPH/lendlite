@@ -295,8 +295,8 @@ Customers must get **404 (not 403)** when accessing another user's application, 
 
 ```
 NODE_ENV=development
-PORT=4000
-DATABASE_URL=postgresql://lendlite:lendlite@localhost:5432/lendlite
+PORT=4001
+DATABASE_URL=postgresql://lendlite:lendlite@localhost:5433/lendlite
 JWT_SECRET=change-me-to-a-long-random-string
 JWT_EXPIRES_IN=1h
 WEB_ORIGIN=http://localhost:3000
@@ -304,7 +304,9 @@ UPLOAD_DIR=./uploads
 MAX_UPLOAD_MB=5
 ```
 
-Web: `NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1`
+Web: `NEXT_PUBLIC_API_URL=http://localhost:4001/api/v1`
+
+> Ports changed from the original spec: API **4001** (4000 is used by another local stack), local Docker Postgres **5433** (5432 likewise). Neon (cloud) is the default dev DB; Docker Postgres is the offline alternative.
 
 Seed users: `admin@lendlite.dev / Admin1234`, `customer@lendlite.dev / Customer1234`.
 
@@ -359,7 +361,7 @@ Components: Dockerfiles (api, web) → full docker-compose → GitHub Actions CI
 **Done when:** `docker compose up` runs everything from a fresh clone; CI is green.
 
 ### Progress
-- [ ] Phase 1 — Backend foundation
+- [x] Phase 1 — Backend foundation
 - [ ] Phase 2 — Database schema
 - [ ] Phase 3 — Authentication
 - [ ] Phase 4 — Calculator + applications

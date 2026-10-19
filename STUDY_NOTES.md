@@ -242,4 +242,55 @@ Verified: healthy, reachable on 127.0.0.1:5433, and a test row survived `down` �
 
 ---
 
-<!-- Next: 1.5 app.ts + server.ts with /health -->
+## 1.5 `app.ts` + `server.ts` with `/health`
+
+### What it does
+- **`app.ts`** builds the Express app but **never calls `listen()`**. Middleware runs in this order:
+  1. `helmet()`: security headers (CSP, HSTS, `nosniff`, `X-Frame-Options`, hides `X-Powered-By`)
+  2. `cors({ origin: WEB_ORIGIN })`: only the web frontend may call the API from a browser
+  3. `express.json({ limit: '100kb' })`: parses JSON bodies; bigger ones → 413
+  4. `pino-http`: one log line per request (method, URL, status, response time). The level is `warn` for 4xx and `error` for 5xx.
+  5. The router mounted at **`/api/v1`**, with `GET /health` → `{ data: { status: 'ok', uptimeSeconds, timestamp } }`
+  6. `notFoundHandler` → `errorHandler` (from 1.4)
+- **`server.ts`** is the only file that opens a port:
+  - `app.listen(env.PORT)`.
+  - Gives a friendly message and exits if the port is taken (`EADDRINUSE`).
+  - **Graceful shutdown** on `SIGINT` (Ctrl+C) / `SIGTERM` (Docker, hosting): stop accepting new requests, let in-flight ones finish, and force exit after 10s.
+- **Port changed to 4001** (`.env`, `.env.example`, `env.ts` default, CLAUDE.md) because another local stack uses 4000.
+
+### Why
+- **`app.ts` separate from `server.ts` = testability.** Supertest imports `app` and sends requests in-memory: no real port, no clashes between parallel tests, no server to shut down.
+- **Middleware order matters:** security headers and body parsing run before routes; 404 and the error handler come last.
+- **`/api/v1` prefix:** API versioning. Breaking changes can ship as `/api/v2` while old clients keep working.
+- **Health endpoint:** Docker, load balancers, CI and uptime monitors poll it to know the service is alive. In Phase 2 it will also check the DB (a "readiness" check).
+- **Trimmed request logs:** full headers are noisy and could contain cookies/tokens. Log only method, URL, status and timing.
+- **Graceful shutdown:** during a deploy, the platform sends SIGTERM. Without handling it, requests in progress (e.g. someone mid-submit) get cut off.
+- **CORS isn't authentication.** It only stops *browsers* on other sites from reading responses; curl/Postman ignore it. Real protection is JWT auth (Phase 3).
+
+### How to test
+```powershell
+cd api
+npm run dev                          # → "LendLite API listening on http://localhost:4001/api/v1"
+# in another terminal:
+curl.exe http://localhost:4001/api/v1/health      # 200 {"data":{"status":"ok",...}}
+curl.exe http://localhost:4001/api/v1/nope        # 404 {"error":{"code":"NOT_FOUND",...}}
+curl.exe -i http://localhost:4001/api/v1/health   # see helmet headers, no X-Powered-By
+```
+Verified: 200 health, 404 unknown route, 400 bad JSON, helmet headers present, CORS limited to `http://localhost:3000`, clear error when port is in use.
+
+### Interview points
+- *"Why separate app and server?"* — Testability (Supertest uses the app without a port) and separation of concerns (configuring the app vs running a process).
+- *"What does helmet do?"* — It sets secure HTTP headers: CSP against XSS, HSTS to force HTTPS, `nosniff`, clickjacking protection, and it hides the framework fingerprint (`X-Powered-By: Express`).
+- *"What is CORS and does it protect your API?"* — A browser rule controlling which origins may read responses. It protects users' browsers, not the API. Auth protects the API.
+- *"How do you handle shutdowns/deploys?"* — Catch SIGTERM, stop accepting connections, drain in-flight requests, exit, with a timeout as a safety net.
+- *"Why version the API?"* — Mobile apps and other clients can't all upgrade at once, so you need to evolve the API without breaking them.
+
+---
+
+# ✅ Phase 1 complete
+
+Express + TypeScript API with validated config, structured logging, centralised errors, security middleware, a health check, and two database options (Neon cloud + Docker local).
+
+---
+
+<!-- Next: Phase 2.1 prisma/schema.prisma -->

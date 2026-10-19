@@ -2,7 +2,7 @@
 
 Tracks what has been built, phase by phase. Updated at the end of each component/phase.
 
-## Phase 1 — Backend foundation (in progress)
+## Phase 1 — Backend foundation ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
@@ -11,7 +11,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 3 | `lib/logger.ts` | Done | pino logger: pretty in dev, JSON in prod, silent in test; redacts auth header/password/token fields. |
 | 4 | `utils/AppError.ts` + `middleware/errorHandler.ts` | Done | `AppError(statusCode, code, message, details?)`; handler maps AppError / ZodError (400) / bad JSON (400) / oversized body (413) / unknown route (404) / bugs (500, logged, no leak). |
 | 4b | Dev scripts: `secret:jwt`, `db:neon` | Done | Random 512-bit JWT secret → `.env`. Neon project `lendlite` (id `odd-dream-83370129`, Sydney, PG 16) created; `DATABASE_URL` → `.env`. Idempotent. `api/scripts/` is gitignored (local only); checked via `npm run typecheck:scripts`. |
-| 5 | `app.ts` + `server.ts` with `/health` | Todo | |
+| 5 | `app.ts` + `server.ts` with `/health` | Done | helmet, CORS (`WEB_ORIGIN`), JSON body limit 100kb, pino-http request logs (trimmed), `/api/v1` router, `GET /health` → 200. `server.ts`: friendly EADDRINUSE error + graceful SIGINT/SIGTERM shutdown. API port moved to **4001**. |
 | 6 | `docker-compose.yml` (Postgres only) | Done | Offline alternative to Neon. `postgres:16-alpine`, host port **5433** (5432 taken by another local stack), localhost-only bind, named volume, `pg_isready` healthcheck. Verified healthy + data persists across restart. |
 
 **Done when:** `docker compose up -d db` + `npm run dev` → `GET /api/v1/health` returns 200.
@@ -29,7 +29,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
 
 ## Phases overview
-- [ ] Phase 1 — Backend foundation
+- [x] Phase 1 — Backend foundation
 - [ ] Phase 2 — Database schema
 - [ ] Phase 3 — Authentication
 - [ ] Phase 4 — Calculator + applications

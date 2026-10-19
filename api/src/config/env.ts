@@ -5,7 +5,8 @@ import { z } from 'zod';
 // process.env values are always strings, so numbers use z.coerce.
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(4000),
+  // 4001, not 4000: another local stack already uses 4000
+  PORT: z.coerce.number().int().positive().default(4001),
   DATABASE_URL: z.string().url(),
   // Short secrets make JWTs brute-forceable, so enforce a minimum length
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
