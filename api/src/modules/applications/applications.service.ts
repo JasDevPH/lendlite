@@ -26,8 +26,10 @@ function idempotencyKeyReused(): AppError {
   return new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'This Idempotency-Key was already used for a different application');
 }
 
+// Spec: submit needs at least one of each of these document types
+const REQUIRED_DOCUMENT_TYPES = ['ID', 'PAYSLIP'] as const;
+
 // Spec: submit requires all fields filled. Returns the names of missing fields.
-// (Document requirements — ID + PAYSLIP — are added in Phase 5.)
 function findMissingFields(app: LoanApplication): string[] {
   const missing: string[] = [];
   if (!app.purpose) missing.push('purpose');
@@ -142,10 +144,21 @@ export async function submitApplication(
   // Only a DRAFT can be submitted (e.g. a second submit WITHOUT a key → 409)
   assertTransition(app.status, ApplicationStatus.SUBMITTED);
 
-  const missing = findMissingFields(app);
-  if (missing.length > 0) {
-    throw new AppError(400, 'APPLICATION_INCOMPLETE', 'Please complete all required fields before submitting', {
-      missingFields: missing,
+  // Report missing fields AND missing documents together, so the UI can show
+  // everything still to do in one go
+  const missingFields = findMissingFields(app);
+  const uploaded = await prisma.document.findMany({
+    where: { applicationId: id },
+    select: { type: true },
+    distinct: ['type'],
+  });
+  const uploadedTypes = new Set(uploaded.map((d) => d.type));
+  const missingDocuments = REQUIRED_DOCUMENT_TYPES.filter((type) => !uploadedTypes.has(type));
+
+  if (missingFields.length > 0 || missingDocuments.length > 0) {
+    throw new AppError(400, 'APPLICATION_INCOMPLETE', 'Please complete all required fields and documents before submitting', {
+      missingFields,
+      missingDocuments,
     });
   }
 

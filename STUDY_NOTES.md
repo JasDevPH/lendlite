@@ -1282,4 +1282,48 @@ Verified end-to-end:
 
 ---
 
-<!-- Next: 5.4 submit rule requiring ID + PAYSLIP -->
+## 5.4 Submit rule: requires an ID + PAYSLIP document
+
+### What it does
+`submitApplication` now also checks documents, after the status check:
+- `REQUIRED_DOCUMENT_TYPES = ['ID', 'PAYSLIP']`.
+- A query fetches the **distinct document types** uploaded for the application.
+- Missing types are reported **together with** missing fields in one 400:
+  ```json
+  { "error": { "code": "APPLICATION_INCOMPLETE",
+      "details": { "missingFields": ["employmentType", …], "missingDocuments": ["ID", "PAYSLIP"] } } }
+  ```
+- `BANK_STATEMENT` is allowed but optional.
+
+### Why
+- **Business rule in the service:** "can't submit without ID + payslip" is lending policy (identity verification + income evidence), so it lives with the other submit rules.
+- **Report everything at once:** the UI can show a full checklist ("upload your ID, fill in employer") instead of making the customer fix one thing, resubmit, and discover the next.
+- **Separate documents query (not `include` on the application):** the idempotent *replay* returns the application exactly as originally returned. Including documents in that query would change the replay's response shape. Verified: replay body still identical.
+- **`distinct: ['type']`:** we only need *which* types exist, not every row.
+- **Checked *after* the status check:** a SUBMITTED application gets 409 (wrong state), not a misleading "missing documents" 400.
+
+### How to test
+Verified end-to-end:
+```
+400  bare draft            missingFields [employmentType, employerName, …], missingDocuments [ID, PAYSLIP]
+400  fields done, no docs  missingDocuments [ID, PAYSLIP]
+201  upload PAYSLIP     →  400 missingDocuments [ID]
+201  upload BANK_STATEMENT → 400 missingDocuments [ID]   (optional type doesn't count)
+201  upload ID          →  200 SUBMITTED
+200  retry same key        [replayed], body identical
+     audit: CREATED → DOCUMENT_UPLOADED ×3 → SUBMITTED
+```
+
+### Interview points
+- *"Why require an ID and a payslip?"* — Responsible lending: verify identity (KYC) and income before assessing affordability. In Australia, responsible-lending obligations require lenders to verify a borrower's financial situation.
+- *"How does your API tell the UI what's missing?"* — A stable error code plus structured `details` (`missingFields`, `missingDocuments`), not just a human message, so the frontend can render a checklist.
+
+---
+
+# ✅ Phase 5 complete
+
+Secure document uploads: multer with MIME + extension allow-list, 5 MB limit (413), random filenames, **magic-byte content check**, owner + DRAFT-only rules, transactional audit, guaranteed cleanup of rejected files, safe streaming download (attachment, no-store, path containment), and the ID + PAYSLIP submit requirement.
+
+---
+
+<!-- Next: Phase 6.1 admin list with filters + pagination -->

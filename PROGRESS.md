@@ -68,14 +68,14 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** a customer can create, edit, and submit a draft; editing after submit → 409; repeated submit with same key returns same result.
 
-## Phase 5 — Documents (in progress)
+## Phase 5 — Documents ✅ Complete
 
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | Multer config (type/size limits) | Done | `middleware/upload.ts`: multer 2.4, PDF/JPG/PNG allow-list (MIME **and** extension must match), 5 MB limit, 1 file, random UUID filenames, absolute `UPLOAD_ROOT`. errorHandler: `LIMIT_FILE_SIZE` → 413 `FILE_TOO_LARGE`, other multer errors → 400. |
 | 2 | Documents service | Done | `uploadDocument` (owner, DRAFT only → 409, **magic-byte check** → 400, tx + `DOCUMENT_UPLOADED` audit, relative `storagePath`), `discardUpload`, `getDocumentForDownload` (owner/admin, path-containment guard). Schema: `type` enum + doc id UUID. |
 | 3 | Upload + download routes | Done | `POST /applications/:id/documents` (multipart `file` + `type`; auth/role/id checks before multer; any failure → file deleted) and `GET /documents/:id/download` (owner/admin, `attachment`, `private, no-store`, missing file → 404). Verified 16 HTTP cases; 0 orphan files. |
-| 4 | Submit rule requiring ID + PAYSLIP | Todo | |
+| 4 | Submit rule requiring ID + PAYSLIP | Done | `submitApplication` checks distinct uploaded types; 400 `APPLICATION_INCOMPLETE` with `details.missingFields` + `details.missingDocuments`. BANK_STATEMENT optional. Replay response unchanged. Verified end-to-end. |
 
 **Done when:** uploads saved with random names, bad type → 400, >5MB → 413, submit without docs → 400.
 
@@ -84,7 +84,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - [x] Phase 2 — Database schema
 - [x] Phase 3 — Authentication
 - [x] Phase 4 — Calculator + applications
-- [ ] Phase 5 — Documents
+- [x] Phase 5 — Documents
 - [ ] Phase 6 — Admin review
 - [ ] Phase 7 — Backend tests
 - [ ] Phase 8 — Frontend setup & auth
