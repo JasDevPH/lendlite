@@ -14,5 +14,7 @@ api/scripts/
 # Uploaded files (dev storage)
 uploads/
 
+CLAUDE.md
+
 *.log
 .DS_Store
