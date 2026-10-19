@@ -1851,4 +1851,67 @@ npm test        # → Test Suites: 6 passed | Tests: 84 passed
 
 ---
 
-<!-- Next: Phase 8.1 Next.js + Tailwind init -->
+# Phase 8 — Frontend setup & auth
+
+## 8.1 Next.js + Tailwind init (+ fintech design foundation)
+
+### What it does
+- **Scaffold:** `create-next-app@16.4.2` in `web/` with TypeScript, **Tailwind v4**, ESLint (flat config), **App Router**, `src/` folder, `@/*` import alias, npm.
+- **Next 16 defaults kept:**
+  - `cacheComponents: true` (dynamic by default, with a prerendered static shell).
+  - `partialPrefetching: true`.
+  - Added `poweredByHeader: false`.
+- **Design tokens in `src/app/globals.css` (`@theme`).** Tailwind v4 keeps config in CSS, not `tailwind.config.js`:
+  - **Brand blue** `brand-50…950` (actions, links, focus) and **navy** `navy-800…950` (hero backgrounds).
+  - **Semantic colours:** `canvas` (page bg), `surface` (cards), `line` (borders), `ink` / `muted` / `subtle` (text levels).
+  - **Shape:** `rounded-card`, `shadow-card`, `shadow-raised`.
+  - **`money` utility:** tabular numerals so amounts line up.
+  - **A global `:focus-visible` outline** for keyboard users.
+- **`layout.tsx`:** **Inter** via `next/font/google` (self-hosted at build time); `lang="en-AU"`; a title template `%s · LendLite`.
+- **`components/brand/Logo.tsx`:** an inline-SVG mark + wordmark, light/dark tone.
+- **`page.tsx`:** a placeholder landing page. Navy hero, CTAs, key facts, an example repayment card (the spec numbers: $888.49/mo, $661.86 interest), and a "How it works" section. The live calculator replaces the card in Phase 9.
+- **`.env.example`** (`NEXT_PUBLIC_API_URL=http://localhost:4001/api/v1`) is committed; `.env.local` is gitignored.
+- Scripts: `dev`, `build`, `start`, `lint`, **`typecheck`**. Demo SVGs removed.
+
+### Why
+- **Read the bundled docs first:** Next 16 ships `AGENTS.md` warning that APIs changed. Relevant breaking changes:
+  - Route `params` are **async (Promises)**.
+  - `middleware` → **`proxy`**.
+  - `next lint` was removed (use `eslint`).
+  - Cache Components is on by default.
+- **Client-side auth fits the SPA guidance:** client components are still prerendered as a static shell. So anything reading `localStorage` (our JWT) must run in the browser only (`useEffect` or React 19.3's `use(browser())`). This shapes 8.3.
+- **Design tokens, not ad-hoc colours:** every screen pulls from one palette, so the UI looks like one product and a rebrand is a one-file change.
+- **Fintech visual language:**
+  - **Navy/blue** reads as trustworthy and calm.
+  - **Emerald only for money/success**, so colour carries meaning.
+  - **Generous whitespace and soft shadows** feel premium and less "form-heavy".
+  - **Tabular numbers** keep amounts in columns from jumping around.
+- **Semantic names (`muted`, `line`, `surface`)** describe *purpose*, so components don't hard-code `gray-500` everywhere.
+- **`next/font`:** no layout shift (font metrics known at build) and no request to Google from users' browsers (privacy).
+- **Accessibility from day one:** `lang`, visible focus rings, sufficient contrast on navy.
+- **Audit:** production deps **0**. Dev-only: 5 high in ESLint's `braces` dependency, which has **no patched release**; lint tooling only, on our own globs.
+
+### Gotchas hit (good debugging stories)
+- **PowerShell 5 wrote `package.json` with a UTF-8 BOM.** Node's `JSON.parse` rejects the invisible `﻿`, so the Tailwind build failed with "Unexpected token". I stripped the BOM with Node.
+- **The build still failed afterwards,** because **Turbopack's file-system cache** in `.next/` held the old file. Deleting `.next` fixed it. Lesson: when a fix "doesn't work", suspect a cache.
+- **Headless-Edge screenshots at 390px looked cropped** (a minimum window-width quirk). At 500px the layout fit perfectly, so it wasn't a real bug.
+
+### How to test
+```powershell
+cd web
+copy .env.example .env.local
+npm run dev            # http://localhost:3000
+npm run typecheck; npm run lint
+npm run build          # ○ / prerendered as static
+```
+Verified: typecheck + lint + production build pass; screenshots at 1440px and 500px look correct (no horizontal overflow).
+
+### Interview points
+- *"Why Next.js App Router?"* — File-based routing, layouts, automatic code-splitting, server and client components, and a static shell for fast first paint, while still supporting SPA-style client data fetching.
+- *"How do you keep a UI consistent?"* — Design tokens (colours, radii, shadows, fonts) defined once and consumed via utilities, plus shared components (built next).
+- *"Server vs client components?"* — Server components render on the server with no JS shipped. Client components (`'use client'`) are needed for state, effects and browser APIs like `localStorage`.
+- *"What did you do about accessibility?"* — Semantic HTML, `lang`, visible focus styles, sufficient contrast, labelled forms (coming in 8.4).
+
+---
+
+<!-- Next: 8.2 lib/api.ts -->

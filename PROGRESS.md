@@ -27,6 +27,8 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 - **`module`/`moduleResolution: node16` + `types: ["node"]`** — fixes editor errors under VS Code's bundled TS 6 (node10 resolution deprecated, `@types/node` no longer auto-included). Verified clean on TS 5 and TS 6.
 - **Tests use a separate `lendlite_test` DB** on local Docker Postgres, never Neon.
 - **Dev-only audit findings accepted:** 20 moderate in Jest's coverage tooling (`sprintf-js`, no patched version exists). Production deps: 0. CI should run `npm audit --omit=dev`.
+- **Next.js 16 (latest)**: read bundled docs (`web/node_modules/next/dist/docs`) before writing code — async `params`, `proxy` (not middleware), Cache Components on.
+- **Web dev-only audit:** 5 high in ESLint's `braces` (no patched release). Web production deps: 0.
 - **`CLAUDE.md` is gitignored and untracked** (kept locally only, at user request).
 - **Neon (serverless Postgres, Sydney) for the dev database** — added at user request. Docker Compose Postgres remains for the Phase 11 "fresh clone" setup.
 - ESLint + Prettier are deferred to a later component; `typecheck` script exists now.
@@ -104,6 +106,19 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | 4 | Application flow integration tests | Done | `applications.test.ts` (25: CRUD, ownership 404s, submit rules, idempotency incl. concurrent, documents incl. 413 + no orphans) + `admin.test.ts` (21: full HTTP lifecycle w/ schedule + audit, 6 invalid transitions, atomic approve rollback, approve race, reject, list/pagination, raw-SQL stats). Helpers `createApplication`, `PDF_BYTES`, `uploads.ts`. **84/84 pass**, stable over 2 runs. |
 
 **Done when:** `npm test` passes with all of the above.
+
+## Phase 8 — Frontend setup & auth (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Next.js + Tailwind init | Done | Next **16.4.2** (App Router, `src/`, Cache Components + Partial Prefetching), React 19.3, **Tailwind v4** `@theme` tokens (brand/navy palette, semantic colours, card shadows, `money` tabular-nums utility), Inter via `next/font`, `Logo` component, placeholder fintech landing page. Build/lint/typecheck pass; screenshots checked at desktop + mobile. |
+| 2 | `lib/api.ts` (typed fetch wrapper) | Todo | |
+| 3 | Auth context/store | Todo | |
+| 4 | Login/register pages | Todo | |
+| 5 | Protected route guard | Todo | |
+| 6 | Layout/nav | Todo | |
+
+**Done when:** can register/login from the UI and see an empty dashboard.
 
 ## Phases overview
 - [x] Phase 1 — Backend foundation

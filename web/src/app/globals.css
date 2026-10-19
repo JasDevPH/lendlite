@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/*
+ * LendLite design tokens (Tailwind v4: tokens live in CSS, not tailwind.config.js).
+ * Every name under @theme becomes utilities, e.g. --color-brand-600 → bg-brand-600,
+ * text-brand-600, border-brand-600; --shadow-card → shadow-card.
+ *
+ * Direction: calm, trustworthy fintech — deep navy + confident blue, neutral
+ * slate greys, emerald reserved for "money / success" moments.
+ */
+@theme {
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand blue (primary actions, links, focus) */
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dce6ff;
+  --color-brand-200: #c0d1ff;
+  --color-brand-300: #94b1ff;
+  --color-brand-400: #6286fb;
+  --color-brand-500: #3e62f4;
+  --color-brand-600: #2944e5;
+  --color-brand-700: #2235c9;
+  --color-brand-800: #212fa2;
+  --color-brand-900: #202e80;
+  --color-brand-950: #161c4c;
+
+  /* Navy (hero backgrounds, headings) */
+  --color-navy-800: #12204a;
+  --color-navy-900: #0b1533;
+  --color-navy-950: #070e24;
+
+  /* Semantic surface + text colours (use these, not raw greys, for consistency) */
+  --color-canvas: #f6f8fc; /* page background */
+  --color-surface: #ffffff; /* cards, panels */
+  --color-line: #e4e8f1; /* borders, dividers */
+  --color-ink: #0f172a; /* primary text */
+  --color-muted: #5b6478; /* secondary text */
+  --color-subtle: #8a93a6; /* hints, placeholders */
+
+  /* Shape + depth */
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-raised: 0 12px 32px -12px rgb(16 24 40 / 0.18), 0 2px 6px rgb(16 24 40 / 0.05);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+
+  /* Visible, consistent keyboard focus everywhere (accessibility) */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+}
+
+/* Money should always line up in tables and cards: equal-width digits */
+@utility money {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
