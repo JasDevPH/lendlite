@@ -831,4 +831,56 @@ roundToCents(Infinity)    → throws RangeError
 
 ---
 
-<!-- Next: 4.2 utils/amortization.ts -->
+## 4.2 `utils/amortization.ts`
+
+### What it does
+Pure functions that turn a loan into a repayment schedule:
+- **`calculateMonthlyPayment(principalCents, annualRateBps, termMonths)`** uses the standard formula
+  ```
+  r = annualRateBps / 10000 / 12          (monthly rate)
+  M = P · r(1+r)ⁿ / ((1+r)ⁿ − 1)          → rounded to whole cents
+  ```
+  For a **0% rate** the formula divides by zero, so it returns `P / n`.
+- **`generateSchedule({ principalCents, annualRateBps, termMonths, startDate })`** loops month by month:
+  1. `interest = round(balance × r)`: interest on what's still owed.
+  2. `principal = M − interest`: the rest of the payment reduces the debt.
+  3. `balance −= principal`.
+  4. **Last installment:** principal = the *entire remaining balance*. It absorbs every rounding difference, so the final balance is exactly 0.
+  5. `dueDate = startDate + n months`.
+
+  Returns `{ monthlyPaymentCents, totalInterestCents, totalPaymentCents, installments[] }`.
+- **`addMonths(date, n)`** works in UTC and clamps to month end (Jan 31 + 1 → Feb 28/29), always counted from the original date.
+- Invalid inputs (non-integer, ≤0, negative rate) throw `RangeError`.
+
+### Why
+- **Pure function:** no DB, no `new Date()` inside (the start date is passed in). Same input → same output, so it's trivially unit-testable and reusable by the calculator (quote) *and* the approval (real schedule).
+- **Interest front-loaded:** each month's interest is on the *current* balance. Early payments are mostly interest, later ones mostly principal (see the table: $100.00 interest in month 1 vs $8.80 in month 12).
+- **Round every installment, fix up at the end:** each row is whole cents (what a customer actually pays). The tiny per-month rounding differences accumulate, so the **last payment absorbs them** and the books balance to exactly 0. The spec requires this.
+- **Due dates from the original date, not chained:** chaining would drift (Jan 31 → Feb 28 → Mar 28 → …). Computing each from the start date gives Jan 31 → Feb 29 → **Mar 31**.
+- **UTC:** avoids daylight-saving and server-timezone surprises (Sydney's DST would otherwise shift dates by an hour, or even a day).
+- **Defensive input checks:** this function feeds money into the DB. Bad inputs should fail loudly, never produce `NaN` installments.
+
+### How to test
+Spec example, $10,000 at 12% for 12 months (verified):
+```
+monthly payment: $888.49 | total interest: $661.86 | total paid: $10,661.86
+ 1 2026-11-19  $888.49  principal $788.49  interest $100.00  balance $9,211.51
+ …
+12 2027-10-19  $888.47  principal $879.67  interest   $8.80  balance     $0.00   ← absorbs 2¢
+```
+- 0%: $1,000 / 3 → $333.33, $333.33, **$333.34**, balance $0.
+- Dates from Jan 31 2028 → Feb 29, Mar 31, Apr 30.
+- **Property check over 2,000 random loans** (within spec limits): 0 failures. Final balance always 0, Σprincipal = loan amount, every value a whole cent, payment = principal + interest every row. Largest last-payment adjustment: 54¢.
+
+(Formal Jest unit tests in Phase 7.)
+
+### Interview points
+- *"Explain the amortization formula."* — It's the fixed payment M that, after n months of charging interest r on the remaining balance, brings the balance exactly to zero (the present value of an annuity, solved for the payment).
+- *"How do you handle rounding?"* — Round each installment's interest and payment to whole cents; the final installment pays off the exact remaining balance, absorbing accumulated differences.
+- *"Why is this a pure function?"* — Testability and reuse. The calculator and the approval flow share it, and tests need no DB or fake clock.
+- *"Any date edge cases?"* — Month-end clamping (31st → 28th/29th/30th), leap years, avoiding drift by computing from the original date, and using UTC to avoid timezone/DST bugs.
+- *"How did you test it beyond the example?"* — A property-style test: thousands of random valid loans, asserting invariants (balance ends at 0, principals sum to the loan) rather than specific numbers.
+
+---
+
+<!-- Next: 4.3 calculator module -->
