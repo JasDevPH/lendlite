@@ -79,6 +79,19 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 
 **Done when:** uploads saved with random names, bad type → 400, >5MB → 413, submit without docs → 400.
 
+## Phase 6 — Admin review (in progress)
+
+| # | Component | Status | Notes |
+|---|---|---|---|
+| 1 | Admin list with filters + pagination | Done | `GET /admin/applications` — router-wide `requireAuth + requireRole(ADMIN)`. Query (coerced): `status`, `minAmount`/`maxAmount` (cents, min ≤ max), `page`, `pageSize` (≤100). DRAFTs hidden unless requested. Count + page in one tx, stable sort (createdAt desc, id). Includes applicant + document count. |
+| 2 | start-review | Todo | |
+| 3 | approve (transaction + schedule) | Todo | |
+| 4 | reject | Todo | |
+| 5 | Audit trail endpoint | Todo | |
+| 6 | Stats endpoint (raw SQL) | Todo | |
+
+**Done when:** full flow DRAFT → APPROVED works, schedule rows exist and final balance = 0, audit trail shows every step.
+
 ## Phases overview
 - [x] Phase 1 — Backend foundation
 - [x] Phase 2 — Database schema

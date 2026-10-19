@@ -1326,4 +1326,62 @@ Secure document uploads: multer with MIME + extension allow-list, 5 MB limit (41
 
 ---
 
-<!-- Next: Phase 6.1 admin list with filters + pagination -->
+# Phase 6 — Admin review
+
+## 6.1 Admin list with filters + pagination — `GET /admin/applications`
+
+### What it does
+- **`admin.routes.ts`**: `adminRouter.use(requireAuth, requireRole('ADMIN'))`, so **every** admin route is admin-only by default. Mounted at `/api/v1/admin`.
+- **`listApplicationsQuerySchema`** (query string):
+  - `status`: enum, optional.
+  - `minAmount` / `maxAmount`: whole cents ≥ 0; refine: min ≤ max.
+  - `page`: ≥ 1, default 1.
+  - `pageSize`: 1–100, default 20.
+  - Uses **`z.coerce`**, because query values arrive as strings.
+- **`listApplications(query)`**:
+  - **Filters:** `status`, or by default *everything except DRAFT*; `amountCents` between `gte`/`lte` (inclusive).
+  - **Count + page in one `$transaction([...])`.**
+  - **Order:** `createdAt desc, id asc` (stable).
+  - **Pages:** `skip = (page − 1) × pageSize`, `take = pageSize`.
+  - **Includes:** applicant `{ id, email, fullName }` and `_count.documents`.
+- **Response:**
+  ```json
+  { "data": { "items": [...], "pagination": { "page": 1, "pageSize": 20, "total": 6, "totalPages": 1 } } }
+  ```
+
+### Why
+- **Router-level admin guard:** secure by default. A new `/admin/*` route can't accidentally be public or customer-accessible.
+- **`z.coerce` for query, strict numbers for JSON bodies:** query strings are *always* text (`?page=2` → `"2"`), so coercion is correct here. In JSON, a string where a number belongs is a client bug.
+- **Drafts hidden by default:** admins review *submitted* work. A customer's half-finished draft isn't their business unless they specifically look.
+- **`pageSize` capped at 100:** protects the DB and API from `?pageSize=1000000`.
+- **Count and rows in one transaction:** without it, a row inserted between the two queries could make `total` disagree with the items.
+- **Stable sort with a tie-breaker:** with `ORDER BY createdAt` alone, rows with identical timestamps can come back in a different order on each query, so an item could appear on page 1 *and* page 2, or on neither. Adding `id` makes the order deterministic.
+- **Offset pagination trade-off:** simple, and it supports "jump to page 5". For huge tables or infinite scroll, **cursor pagination** (`WHERE (createdAt, id) < (lastCreatedAt, lastId)`) is faster and stable under inserts. Good to mention.
+- **The indexes pay off here:** `@@index([status])` from Phase 2 serves this exact filter.
+- **`select` on `user`:** joins in the applicant's name/email for the table, never the password hash.
+
+### How to test
+```
+GET /api/v1/admin/applications?status=SUBMITTED&minAmount=500000&maxAmount=4000000&page=1&pageSize=20
+```
+Verified with 7 test applications (1 DRAFT + 6 others):
+
+| Query | Result |
+|---|---|
+| (none) | 6 items, **DRAFT hidden**, applicant info, no passwordHash |
+| `status=SUBMITTED` / `status=DRAFT` | 3 / 1 |
+| `minAmount=1000000` / `maxAmount=1000000` | 4 / 3 (inclusive bounds) |
+| `status=SUBMITTED&minAmount=500000&maxAmount=4000000` | 2 |
+| `pageSize=4` page 1 / 2 / 3 | 4 / 2 / 0 items, `totalPages: 2` |
+| `status=PENDING`, `min>max`, `pageSize=1000&page=0`, `minAmount=abc` | **400** with field errors |
+| customer token | **403** |
+
+### Interview points
+- *"How did you implement pagination?"* — Offset/limit (`skip`/`take`) with a capped page size, a stable sort (createdAt + id tie-breaker), and total + rows fetched in one transaction. I'd switch to cursor pagination for very large datasets.
+- *"Offset vs cursor pagination?"* — Offset is simple and allows random page access, but gets slow at high offsets (the DB still scans the skipped rows) and can shift when rows are inserted. Cursor is fast and stable, but has no "jump to page N".
+- *"Why coerce query params but not body fields?"* — Query params are always strings by definition. JSON has real number types, so a string there signals a bug.
+- *"How do you protect admin routes?"* — Auth + role middleware applied to the whole admin router, so it's impossible to forget on one route.
+
+---
+
+<!-- Next: 6.2 start-review -->

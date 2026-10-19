@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { adminRouter } from './modules/admin/admin.routes';
 import { applicationsRouter } from './modules/applications/applications.routes';
 import { authRouter } from './modules/auth/auth.routes';
 import { calculatorRouter } from './modules/calculator/calculator.routes';
@@ -68,6 +69,7 @@ api.use('/auth', authRouter);
 api.use('/calculator', calculatorRouter);
 api.use('/applications', applicationsRouter);
 api.use('/documents', documentsRouter);
+api.use('/admin', adminRouter);
 
 app.use('/api/v1', api);
 
