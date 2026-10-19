@@ -2194,4 +2194,46 @@ Real browser (Edge + playwright-core), **14/14**:
 
 ---
 
-<!-- Next: 9.2 dashboard list -->
+## 9.2 Dashboard list (status badges, loading / empty / error states)
+
+### What it does
+- **`lib/status.ts`:** `STATUS_META` gives each status a **label**, badge colours and a plain-language customer hint (DRAFT → "Not submitted yet…", UNDER_REVIEW → "A lending specialist is assessing…", REJECTED is shown as **"Declined"**). Also `STATUS_FLOW` for timelines.
+- **`components/applications/StatusBadge`:** colour + dot + **text** label.
+- **`lib/useApi<T>(path)`:** a reusable data hook returning `{ data, error, loading, reload }`. Aborts the request on unmount/path change; normalises any failure to `ApiError`.
+- **`components/applications/ApplicationCard`:**
+  - The whole card is one link to `/applications/:id`.
+  - Shows purpose, amount, term, rate (if approved), the status hint, the most relevant date (Started/Submitted/Decided).
+  - Status-specific action ("Continue application", "View repayment schedule", …). Plus `ApplicationCardSkeleton`.
+- **`components/dashboard/Dashboard`** (replaces the static welcome):
+  - **Loading:** skeleton cards. **Empty:** `EmptyState` + CTA. **Error:** `Alert` + **Try again**. **Data:** a 2-column grid, newest first.
+  - **Summary strip:** in progress / approved / total approved, derived from the same data (no extra request).
+
+### Why
+- **One status vocabulary everywhere** (`STATUS_META`): customers, the detail page and admins see consistent colours and labels. "Declined" is kinder customer-facing wording than the internal `REJECTED`.
+- **Never colour alone:** each badge has text, so it works for colour-blind users and screen readers (WCAG).
+- **`useApi` hook:** every data page needs the same loading/error/retry logic. Writing it once keeps pages small and consistent (spec: loading, empty and error states on every data page).
+- **Skeletons shaped like the real content:** no layout jump when data arrives, and it feels faster than a spinner.
+- **Error state keeps the page usable:** a clear message and a retry, instead of a blank screen.
+- **Data stays fresh on return:** with Next 16's `<Activity>`, the dashboard stays mounted when you navigate away, but **effects re-run when it becomes visible again**, so the list refetches automatically after you create or submit an application.
+- **Whole-card link:** a large tap target (mobile-friendly) and a single, clear focus stop for keyboard users.
+- **Ownership is the API's job:** the page simply shows `GET /applications`. The test proves another customer's application never appears.
+
+### How to test
+Real browser, **14/14** (fresh customer; 5 applications seeded, one per status, plus one belonging to someone else):
+- **States:** empty state for a new customer; **loading** skeletons (request slowed to 1.2 s).
+- **Data:** exactly 5 cards; **the other customer's loan isn't shown**; newest first; badges Declined / Approved / Under review / Submitted / Draft; approved card shows `12.50% p.a.`; draft says "Continue application"; summary `3 | 1 | $20,000`; cards link to `/applications/…`.
+- **Error:** simulated 500 → error alert; **Try again** recovers.
+- **Layout:** no overflow at 390 px; no JS errors.
+
+*Test gotchas (all harness issues, not app bugs):*
+1. Removing a still-active slowed route → "Route is already handled": use `unrouteAll({ behavior: 'ignoreErrors' })`.
+2. **Next.js adds its own hidden `role="alert"` route announcer** (in a shadow root) so screen readers hear page changes. A generic "no alerts on the page" assertion counted it, so assertions must target our alert by text.
+
+### Interview points
+- *"How do you handle loading, empty and error states?"* — A shared `useApi` hook exposes all three plus `reload`. Each page renders skeletons, an empty state with a call to action, or an error with retry.
+- *"How do you keep the UI accessible for status indicators?"* — Text labels alongside colour, semantic lists, link cards with clear action text.
+- *"How does the dashboard stay up to date?"* — It refetches when it becomes visible again (Next 16 Activity re-runs effects). Production apps often add a client cache (SWR / TanStack Query) for revalidation and deduplication.
+
+---
+
+<!-- Next: 9.3 multi-step application form -->

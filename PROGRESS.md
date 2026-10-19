@@ -125,7 +125,7 @@ Tracks what has been built, phase by phase. Updated at the end of each component
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1 | Calculator widget | Done | `LoanCalculator` on landing page: amount/term/example-rate sliders (`RangeField`, accessible), live quote from `POST /calculator/quote`, 250 ms debounce + `AbortController`, pre-filled default quote in static HTML, error state, CTA → `/register` or pre-filled `/applications/new`. Browser e2e 14/14. |
-| 2 | Dashboard list | Todo | |
+| 2 | Dashboard list | Done | `STATUS_META` + `StatusBadge` (text + colour), reusable `useApi` hook (loading/error/reload, abort), `ApplicationCard` (+ skeleton), `Dashboard` with summary strip and loading/empty/error states. Browser e2e 14/14 (incl. other customer's data hidden, retry). |
 | 3 | Multi-step application form | Todo | |
 | 4 | Document upload | Todo | |
 | 5 | Application detail (status timeline + schedule) | Todo | |
