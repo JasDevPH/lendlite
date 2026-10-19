@@ -4,7 +4,9 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env } from './config/env';
 import { logger } from './lib/logger';
+import { prisma } from './lib/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { AppError } from './utils/AppError';
 
 // Builds the Express app WITHOUT calling listen(), so tests (Supertest)
 // can import it and fire requests without opening a real port.
@@ -36,11 +38,21 @@ app.use(
 // All endpoints live under /api/v1 so a future v2 can run side by side
 const api = express.Router();
 
-// Liveness check for Docker/CI/uptime monitors. DB check is added in Phase 2.
-api.get('/health', (_req, res) => {
+// Health check for Docker/CI/uptime monitors: is the API up AND can it reach the DB?
+api.get('/health', async (_req, res, next) => {
+  try {
+    // Cheapest possible round-trip to the database
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    logger.error({ err }, 'Health check: database unreachable');
+    // 503 = "temporarily unable to serve", so load balancers stop routing here
+    return next(new AppError(503, 'SERVICE_UNAVAILABLE', 'Database is unreachable'));
+  }
+
   res.json({
     data: {
       status: 'ok',
+      database: 'ok',
       uptimeSeconds: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     },

@@ -1,6 +1,7 @@
 import { app } from './app';
 import { env } from './config/env';
 import { logger } from './lib/logger';
+import { prisma } from './lib/prisma';
 
 // The only file that opens a port. Everything else is importable/testable.
 const server = app.listen(env.PORT, () => {
@@ -21,7 +22,11 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 // (Docker/hosting platforms send SIGTERM; Ctrl+C sends SIGINT.)
 function shutdown(signal: string): void {
   logger.info({ signal }, 'Shutting down');
-  server.close(() => process.exit(0));
+  server.close(async () => {
+    // Release DB connections cleanly so the pool isn't left hanging
+    await prisma.$disconnect();
+    process.exit(0);
+  });
   // Safety net: force exit if connections don't close in time
   setTimeout(() => process.exit(1), 10_000).unref();
 }

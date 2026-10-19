@@ -398,4 +398,46 @@ docker exec lendlite-db psql -U lendlite -d lendlite -c "\dt"
 
 ---
 
-<!-- Next: 2.3 lib/prisma.ts -->
+## 2.3 `lib/prisma.ts` + DB-aware `/health`
+
+### What it does
+- **`lib/prisma.ts`** exports **one shared `PrismaClient`** for the whole app.
+  - Prisma's `warn`/`error` events go through **pino**, so all logs share one format.
+  - In development, every SQL query is logged at `debug` level with its duration.
+- **`/health` now pings the database** with `prisma.$queryRaw\`SELECT 1\``:
+  - DB reachable → `200 { data: { status: 'ok', database: 'ok', uptimeSeconds, timestamp } }`
+  - DB unreachable → `503 { error: { code: 'SERVICE_UNAVAILABLE', message: 'Database is unreachable' } }`. The real Prisma error is logged server-side only.
+- **`server.ts`** calls `prisma.$disconnect()` during graceful shutdown.
+
+### Why
+- **Singleton client:** each `PrismaClient` has its own connection pool. A new client per request would open more and more connections until Postgres refuses them (Neon's free tier has low limits).
+- **No global-caching trick needed:** that pattern is for Next.js hot reload. `tsx watch` restarts the whole process, so the module-level `const` is enough.
+- **`SELECT 1`:** the cheapest real round-trip. It proves the network, credentials and DB are all working without touching any table.
+- **503, not 500:** 503 "Service Unavailable" means *temporarily* can't serve. Load balancers and Kubernetes treat it as "take this instance out of rotation", which is exactly right when the DB is down.
+- **try/catch here, unlike elsewhere:** in an Express 4 `async` route, a thrown error would become an unhandled promise rejection, not reach the error handler. Here we catch and `next(new AppError(...))` explicitly. In Phase 3 an `asyncHandler` wrapper will do this for every controller automatically.
+- **`$queryRaw` with a tagged template** is parameterised (injection-safe). We'll rely on that again for the stats query.
+- **`$disconnect` on shutdown:** closes pool connections cleanly instead of leaving the DB to time them out.
+- **Env vars override `.env`:** dotenv never overwrites variables already set in the shell. That's how we tested Docker without editing `.env`.
+
+### How to test
+```powershell
+cd api
+npm run dev
+curl.exe http://localhost:4001/api/v1/health
+# → 200 {"data":{"status":"ok","database":"ok",...}}
+
+# Simulate DB outage (when DATABASE_URL points at Docker):
+docker compose stop db     # → health returns 503 SERVICE_UNAVAILABLE
+docker compose start db    # → back to 200
+```
+Verified: Neon → 200, Docker → 200, Docker stopped → 503 with the error logged server-side.
+
+### Interview points
+- *"Why a single Prisma client?"* — Connection pooling. DB connections are expensive and limited; one pool is shared by all requests.
+- *"Liveness vs readiness checks?"* — Liveness: "is the process alive?" (restart it if not). Readiness: "can it serve traffic right now?" (stop routing to it if not). Our `/health` is a readiness check because it includes the DB.
+- *"Why 503 when the DB is down?"* — It signals a temporary dependency failure, so orchestrators stop routing traffic but don't treat the app as broken code.
+- *"How do async errors reach Express's error handler?"* — In Express 4 they don't automatically. You must catch and call `next(err)`, or use a wrapper. (Express 5 does it natively.)
+
+---
+
+<!-- Next: 2.4 prisma/seed.ts -->
