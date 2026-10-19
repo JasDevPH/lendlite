@@ -151,4 +151,50 @@ You'll test it for real against `/health` and unknown routes once `app.ts` exist
 
 ---
 
+## 1.4b Dev scripts — JWT secret generator + Neon database setup
+
+### What it does
+- **`scripts/lib/env-file.ts`** has two helpers:
+  - `upsertEnvVar(key, value)` replaces a `KEY=` line in `api/.env` or appends it. It creates `.env` from `.env.example` first if needed.
+  - `mask(secret)` prints secrets safely as `abcd…wxyz`.
+- **`scripts/generate-jwt-secret.ts`** (`npm run secret:jwt`) builds a secret from 64 random bytes from `crypto.randomBytes`, encoded as base64url (86 chars).
+  - Prints it by default.
+  - With `-- --write`, saves it to `.env` and only prints a masked version.
+- **`scripts/setup-neon.ts`** (`npm run db:neon`) provisions a serverless Postgres database on **Neon** using the `neonctl` CLI:
+  1. Checks you're logged in (`neonctl me`).
+  2. Resolves the org (auto if you have one; otherwise set `NEON_ORG_ID`).
+  3. Finds the `lendlite` project, or creates it: **Sydney (`aws-ap-southeast-2`), Postgres 16**, database + role `lendlite`.
+  4. Gets the **direct** (non-pooled) connection string and writes `DATABASE_URL` to `.env`. The password is masked in the output.
+  - **Idempotent:** re-running reuses the existing project instead of creating a duplicate.
+- **`scripts/tsconfig.json`** means `npm run typecheck` checks these scripts too. They run with `tsx` and are never compiled into `dist/`.
+
+### Why
+- **`crypto.randomBytes`, not `Math.random`.** `Math.random` is predictable and not meant for security. `randomBytes` uses the OS's cryptographically secure generator.
+- **512 bits** is well above the 256-bit minimum for HS256 (HMAC-SHA256) signing.
+- **base64url** is safe in `.env` files and URLs (no `+ / =` or spaces).
+- **Scripts write to `.env` directly,** so secrets never need copy-pasting through chat, terminals or screenshots. Output is masked.
+- **Neon instead of local Docker for dev:** a real managed Postgres with nothing to install, and the same connection string works from CI or a deployed API. Docker Compose still matters for the "fresh clone runs everything" goal in Phase 11.
+- **Sydney region:** an Australian fintech would keep customer financial data onshore (lower latency, and data-residency expectations).
+- **Direct, not pooled, connection:** Prisma migrations need a direct connection. A pooled URL (PgBouncer) is better for many short-lived serverless connections at runtime, which is a Phase 11 deploy concern.
+- **`sslmode=require`:** Neon only accepts encrypted connections, so data in transit is encrypted.
+
+### How to test
+```powershell
+cd api
+npm run secret:jwt                 # prints a random 86-char secret
+npm run secret:jwt -- --write      # → "JWT_SECRET written to api/.env (kdOD…Y1lQ, 86 chars)"
+npm run db:neon                    # 1st run: "Created project …"; re-run: "Using existing project …"
+npx tsx -e "import { env } from './src/config/env'; console.log(new URL(env.DATABASE_URL).host)"
+# → ep-…ap-southeast-2.aws.neon.tech
+```
+⚠️ Rotating `JWT_SECRET` logs everyone out: tokens signed with the old secret stop verifying.
+
+### Interview points
+- *"How do you generate secrets?"* — With a CSPRNG (`crypto.randomBytes`), with enough entropy for the algorithm. Never hand-typed, never committed. In production they live in a secrets manager.
+- *"What happens if the JWT secret leaks?"* — Anyone can forge tokens for any user, including admins. You rotate the secret, which invalidates every existing token. That's one reason to keep token expiry short (1h).
+- *"Pooled vs direct DB connections?"* — Pooling reuses a few DB connections across many app requests (important for serverless). Migrations and some session features need a direct connection.
+- *"Why make setup scripts idempotent?"* — They're safe to re-run by anyone, including CI, without creating duplicate resources. It's the same idea as the idempotent submit endpoint.
+
+---
+
 <!-- Next: 1.5 app.ts + server.ts with /health -->
