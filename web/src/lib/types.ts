@@ -63,10 +63,12 @@ export interface LoanApplication {
   updatedAt: string;
 }
 
-// GET /applications/:id also includes documents + schedule
+// GET /applications/:id also includes documents, schedule and the applicant
 export interface LoanApplicationDetail extends LoanApplication {
   documents: LoanDocument[];
   schedule: Installment[];
+  user: Pick<User, 'id' | 'fullName' | 'email'>;
+  decidedById: string | null;
 }
 
 export interface Quote {

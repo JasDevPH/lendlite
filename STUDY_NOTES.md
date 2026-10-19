@@ -2549,4 +2549,48 @@ Real browser, **15/15** (23 seeded applications; every page/filter compared with
 
 ---
 
-<!-- Next: 10.3 admin detail page -->
+## 10.3 Admin application detail page
+
+### What it does
+- **Backend tweak:** `GET /applications/:id` now includes `user: { id, fullName, email }` via an explicit `select` (never `passwordHash`). New test: detail includes the applicant and the response contains no password hash. Applications suite **24/24**.
+- **`/admin/applications/[id]`** (Suspense + `useParams`, Partial Prerender) → **`AdminApplicationDetail`:**
+  - **Header:** applicant name · email, amount, purpose · term · reference, `StatusBadge`.
+  - **`ActionPanel`** (driven by status, mirroring the API's status machine):
+    - SUBMITTED → **"Ready for review" + Start review** (`POST /admin/applications/:id/start-review`).
+    - UNDER_REVIEW → panel for the decision (the Approve/Reject dialogs are 10.4).
+    - APPROVED → "Approved at 15.00% p.a." + decided time. REJECTED → the reason. DRAFT → "can't be reviewed yet".
+    - On an error (e.g. 409 because another admin acted first) it shows the message **and refetches**, so the page reflects reality.
+  - **Content:** Affordability snapshot; repayment schedule (approved); documents **grouped by type** (+ "Missing: …"), downloadable by the admin.
+  - **Sidebar cards:** Loan, Applicant, Dates.
+- **`AffordabilitySnapshot`:**
+  - Monthly income (annual ÷ 12), monthly expenses, and the **repayment range** from real quotes at 5% and 25%.
+  - **Band:** (expenses + repayment) ÷ income → Comfortable / Stretched / High, with an icon + label, **"Indicative only — not a credit decision"**.
+- **Refactor:** shared `InfoCard` + `DetailRow` (`components/ui/InfoCard.tsx`) now used by both the customer and admin detail pages.
+
+### Why
+- **The reviewer needs context in one place:** who's applying, what for, can they afford it, are the documents there. That's the information the decision depends on.
+- **Affordability as a range:** the repayment depends on the rate the admin is about to choose, so show both ends and judge on the worst case. Clearly labelled indicative: real lenders use full assessments (verified income, living-expense benchmarks, credit checks), and the UI shouldn't pretend otherwise.
+- **Colour + icon + text for the band:** the meaning never relies on colour alone.
+- **Actions follow the status machine:** the UI only offers moves the API allows. The API still enforces them (409), and the UI handles that gracefully by refetching.
+- **Concurrency in the UI:** two admins can open the same application. If the other one acts first, this admin gets an explanation and the up-to-date state instead of a stale screen.
+- **Explicit `select` for the user:** allow-list fields so a future column (or the hash) can't leak.
+- **Shared `InfoCard`:** two pages, one implementation. The regression check confirmed the customer page still renders.
+
+### How to test
+Real browser, **16/16**:
+- **Reaching it:** queue (filtered to Submitted) → **Review →** on the applicant's row → this page.
+- **Content:** header shows name + email, $12,000, Submitted; affordability $7,500.00/mo income, $2,500.00 expenses, range **= API quotes**; band "Stretched — 40%–42%… Indicative only".
+- **Documents:** labelled Photo ID / Recent payslip; **admin download = exact bytes**.
+- **Start review:** → Under review, button gone, `REVIEW_STARTED` audit row by the admin.
+- **Race:** another admin starts it first → message + page refreshes to Under review.
+- **Other statuses:** approved → "Approved at 15.00% p.a." + 24-row schedule + rate; declined → reason; draft → explained, no actions; unknown id → "Application not found".
+- **Regression + layout:** customer detail still renders after the refactor; no mobile overflow; no JS errors.
+
+### Interview points
+- *"How do you handle two admins acting on the same record?"* — The API's conditional update lets only one succeed (409 for the other). The UI catches that, explains it, and refetches so nobody acts on stale data.
+- *"How did you present affordability?"* — Monthly income vs expenses vs a repayment *range* across allowed rates, a ratio band with icon + label, explicitly marked indicative.
+- *"How do you avoid duplicating UI?"* — Extract shared presentational components (InfoCard, DetailRow, StatusBadge, DocumentFileItem, RepaymentSchedule) once a second screen needs them.
+
+---
+
+<!-- Next: 10.4 approve / reject modals -->

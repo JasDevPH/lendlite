@@ -106,6 +106,16 @@ describe('ownership: other customers get 404, never 403', () => {
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
+  it('detail includes the applicant (name + email) but never a password hash', async () => {
+    const mine = await createApplication(customer);
+
+    const res = await api.get(`/api/v1/applications/${mine.id}`).set(authHeader(customer));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user).toEqual({ id: customer.id, fullName: customer.fullName, email: customer.email });
+    expect(JSON.stringify(res.body)).not.toContain('passwordHash');
+  });
+
   it('gives the same 404 for a non-existent id (no way to probe ids)', async () => {
     const theirs = await createApplication(other);
 

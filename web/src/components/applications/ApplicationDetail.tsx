@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
-import type { ReactNode } from 'react';
 import { DocumentFileItem } from '@/components/documents/DocumentFileItem';
 import { Alert } from '@/components/ui/Alert';
 import { Button, buttonClasses } from '@/components/ui/Button';
+import { DetailRow, InfoCard } from '@/components/ui/InfoCard';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { formatCents, formatCentsWhole, formatDate, formatMonths, formatRate } from '@/lib/format';
 import { STATUS_META } from '@/lib/status';
@@ -91,33 +91,33 @@ export function ApplicationDetail() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-8">
           {approved && (
-            <Card title="Your loan">
+            <InfoCard title="Your loan">
               <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Stat label="Interest rate" value={formatRate(app.annualRateBps!)} />
                 <Stat label="Monthly payment" value={monthly !== undefined ? formatCents(monthly) : '—'} />
                 <Stat label="Total interest" value={formatCents(totalInterest)} />
                 <Stat label="Total repayable" value={formatCents(app.amountCents + totalInterest)} />
               </dl>
-            </Card>
+            </InfoCard>
           )}
 
           {approved && (
-            <Card title="Repayment schedule">
+            <InfoCard title="Repayment schedule">
               <RepaymentSchedule schedule={app.schedule} applicationId={app.id} />
-            </Card>
+            </InfoCard>
           )}
 
-          <Card title="Your details">
+          <InfoCard title="Your details">
             <dl className="divide-y divide-line text-sm">
-              <Row label="Loan purpose" value={app.purpose} />
-              <Row label="Employment" value={EMPLOYMENT_OPTIONS.find((o) => o.value === app.employmentType)?.label ?? '—'} />
-              {app.employerName && app.employmentType !== 'UNEMPLOYED' && <Row label="Employer" value={app.employerName} />}
-              <Row label="Annual income" value={app.annualIncomeCents === null ? '—' : formatCents(app.annualIncomeCents)} />
-              <Row label="Monthly expenses" value={app.monthlyExpensesCents === null ? '—' : formatCents(app.monthlyExpensesCents)} />
+              <DetailRow label="Loan purpose" value={app.purpose} />
+              <DetailRow label="Employment" value={EMPLOYMENT_OPTIONS.find((o) => o.value === app.employmentType)?.label ?? '—'} />
+              {app.employerName && app.employmentType !== 'UNEMPLOYED' && <DetailRow label="Employer" value={app.employerName} />}
+              <DetailRow label="Annual income" value={app.annualIncomeCents === null ? '—' : formatCents(app.annualIncomeCents)} />
+              <DetailRow label="Monthly expenses" value={app.monthlyExpensesCents === null ? '—' : formatCents(app.monthlyExpensesCents)} />
             </dl>
-          </Card>
+          </InfoCard>
 
-          <Card title="Documents">
+          <InfoCard title="Documents">
             {app.documents.length === 0 ? (
               <p className="text-sm text-muted">No documents uploaded.</p>
             ) : (
@@ -127,13 +127,13 @@ export function ApplicationDetail() {
                 ))}
               </ul>
             )}
-          </Card>
+          </InfoCard>
         </div>
 
         <aside className="space-y-4">
-          <Card title="Progress">
+          <InfoCard title="Progress">
             <StatusTimeline application={app} />
-          </Card>
+          </InfoCard>
           <p className="px-1 text-xs text-subtle">
             {STATUS_META[app.status].customerHint} {app.submittedAt && `Submitted ${formatDate(app.submittedAt)}.`}
           </p>
@@ -143,29 +143,11 @@ export function ApplicationDetail() {
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section aria-label={title} className="rounded-card border border-line bg-surface p-5 shadow-card sm:p-6">
-      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="money mt-1 text-lg font-semibold text-ink">{value}</dd>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 py-2.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className="money text-right font-medium text-ink">{value}</dd>
     </div>
   );
 }

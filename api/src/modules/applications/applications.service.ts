@@ -82,6 +82,8 @@ export async function getApplication(id: string, user: AuthUser) {
     include: {
       documents: { orderBy: { uploadedAt: 'asc' } },
       schedule: { orderBy: { installmentNo: 'asc' } },
+      // Applicant identity for the admin review page. Explicit select: never the passwordHash.
+      user: { select: { id: true, fullName: true, email: true } },
     },
   });
   if (!application) throw notFound();
