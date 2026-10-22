@@ -3,7 +3,7 @@
 
 # ---- base: shared OS layer ----
 # Debian slim (glibc), not Alpine: bcrypt and Prisma ship prebuilt glibc binaries
-FROM node:20-bookworm-slim AS base
+FROM node:24.22.1-bookworm-slim AS base
 # Prisma's query engine needs OpenSSL to talk TLS to Postgres
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*

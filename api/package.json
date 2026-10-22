@@ -5,7 +5,7 @@
   "description": "LendLite API — Express + TypeScript backend for a mini digital lending platform",
   "main": "dist/server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.22.1"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
