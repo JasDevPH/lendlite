@@ -3,7 +3,7 @@
 # and the traced files it needs.
 
 # ---- base: same OS as the API image ----
-FROM node:20-bookworm-slim AS base
+FROM node:24.22.1-bookworm-slim AS base
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
